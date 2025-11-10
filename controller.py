@@ -21,14 +21,14 @@ def projected_errors (u1, u2, u3, ball_position, s):
     return errors
 
 class PIDcontroller:
-    def __init__(self, Kp, Ki, Kd):
+    def __init__(self, Kp, Ki, Kd, min_motor_angle, max_motor_angle):
         self.Kp = Kp
         self.Ki = Ki
         self.Kd = Kd
         self.previous_error = 0
         self.integral = 0
-        self.min_output_angle = 0  # degrees
-        self.max_output_angle = 20   # degrees
+        self.min_output_angle = min_motor_angle  # degrees
+        self.max_output_angle = max_motor_angle   # degrees
 
     def update(self, error, dt=0.033): #default dt is ~30fps the inverse of that is the seconds
         # Proportional term
