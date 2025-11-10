@@ -17,12 +17,15 @@ class SerialPort:
             #bool: True if connection successful, False otherwise
         
         try:
-            self.serial = serial.Serial(self.servo_port, 9600)
+            self.serial = serial.Serial(self.servo_port, 9600, timeout=0.1)
             time.sleep(2)  # Allow time for connection to stabilize
+            # self.serial = serial.Serial(self.servo_port, 9600)
+            # time.sleep(2)  # Allow time for connection to stabilize
             print("[SERVO] Connected")
             return True
-        except:
-            print("[SERVO] Failed to connect")
+        except Exception as e:
+            print("Serial connect error:", e)
+            self.serial = None
             return False
 
     def send_servo_angles(self, angle1, angle2, angle3):
@@ -31,15 +34,12 @@ class SerialPort:
         #Args:
             #angle1, angle2, angle3 (float): Desired servo angles in degrees (0-30)
 
+        print(" [SERVO] Sending angles:", angle1, angle2, angle3)
+
         if self.serial and self.serial.is_open: #Only run if the serial port has been connected
             # Clip angles to safe range and convert to integers
-            angles = [
-                int(np.clip(angle1, min_angle, max_angle)), 
-                int(np.clip(angle2, min_angle, max_angle)), 
-                int(np.clip(angle3, min_angle, max_angle))
-            ]
             # Send as 3 bytes (one byte per angle, values 0-30)
-            self.serial.write(bytes(angles))
+            self.serial.write(bytes([int(angle1), int(5 + angle2), int(angle3)]))
             self.serial.flush()  # Ensure data is sent immediately
     
     def read_serial_output(self):

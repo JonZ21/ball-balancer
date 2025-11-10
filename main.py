@@ -1,7 +1,6 @@
-import ball_tracking
-import camera_calibration
+# from serial import SerialPort
 from controller import projected_errors, PIDcontroller
-import serial
+from serial_interface import SerialPort
 from ball_tracking import BallDetector
 import cv2
 import json
@@ -27,19 +26,19 @@ print("[INFO] Center point marked with white vertical line")
 print("[INFO] Ball position shown with green circle")
 
 
-#Placeholder to import the config code, obtain each unit vector for the axis
-#import the centroid location
-#setup for ball tracking as necessary
+# Placeholder to import the config code, obtain each unit vector for the axis
+# import the centroid location
+# setup for ball tracking as necessary
 
-# #establish connection to serial port
-# serial_port = serial()
-# serial_port.connect_serial()
+#establish connection to serial port
+serial_port = SerialPort()
+serial_port.connect_serial()
 
-# #Send neutral angles to the motors on startup
-# serial_port.send_servo_angles(10, 10, 10)
+#Send neutral angles to the motors on startup
+serial_port.send_servo_angles(10, 10, 10)
 
 #initialize PID controllers
-Kp = 1
+Kp = 0.1
 Kd = 0
 Ki = 0
 
@@ -48,7 +47,7 @@ min_motor_angle = 0
 max_motor_angle = 20
 
 motor1_pid = PIDcontroller(Kp, Kd, Ki, min_motor_angle, max_motor_angle)
-motor2_pid = PIDcontroller(Kp, Kd, Ki, min_motor_angle, max_motor_angle)
+motor2_pid = PIDcontroller(Kp, Kd, Ki, min_motor_angle +6, max_motor_angle +6)
 motor3_pid = PIDcontroller(Kp, Kd, Ki, min_motor_angle, max_motor_angle)
 
 while(True):
@@ -99,8 +98,9 @@ while(True):
     motor3_command = motor3_pid.update(error_array[2])
 
     #Send code to each motor by converting the commands to a 3 byte array and sending over serial
-    print(f"Motor Commands: {motor1_command}, {motor2_command}, {motor3_command}")
-    # serial_port.send_servo_angles(motor1_command, motor2_command, motor3_command)
+    serial_port.send_servo_angles(motor1_command, motor2_command, motor3_command)
+
+    # delay(10)
     
 cap.release()
 cv2.destroyAllWindows()
