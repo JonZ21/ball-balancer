@@ -1,5 +1,23 @@
-#obtain calibration data necessary to test ball tracking on the stewart platform. 
-#most functions are from the 1D balancer simple_cal file, but with the motor calibration removed. 
+
+################################################################################
+#                                                                              #
+#                         CAMERA CALIBRATION SYSTEM                           #
+#                                                                              #
+#  INPUT:    Camera feed from computer vision camera                          #
+#  PROCESS:  Interactive GUI-based calibration tool                           #
+#  OUTPUT:   config.json with calibration parameters                          #
+#                                                                              #
+#  CONFIG.JSON CONTAINS:                                                       #
+#  ├── timestamp: ISO format timestamp of calibration                         #
+#  ├── camera: Camera settings and center point in pixels                     #
+#  ├── ball_detection: HSV color range for ball detection                     #
+#  └── calibration:                                                           #
+#      ├── pixel_to_meter_ratio: Conversion factor (meters per pixel)         #
+#      └── unit_vectors: [u1, u2, u3] - normalized vectors from corners      #
+#                        pointing toward platform center                       #
+#                                                                              #
+################################################################################
+
 
 import cv2
 import numpy as np
@@ -28,11 +46,6 @@ class CameraCalibrator:
         self.platform_points = []  # 3 clicked points
         self.center_point = None
         self.pixel_to_meter_ratio = None
-
-        # Axis Vectors 
-        self.axis_1_vector = []
-        self.axis_2_vector = []
-        self.axis_3_vector = []
 
         # Unit Vectors (return as np arrays for easier calculations)
         self.u1 = []
@@ -106,15 +119,15 @@ class CameraCalibrator:
         tri_radius = math.sqrt((p2[0] - p1[0])**2 + (p2[1] - p1[1])**2) / 2
         self.center_point = (int(cx), int(cy))
 
-        # Compute axis vectors
-        mid_1_2_x = (p1[0] + p2[0]) / 2
-        mid_1_2_y = (p1[1] + p2[1]) / 2
+        # Compute unit vectors
+        
+        mag_1 = math.sqrt((cx - p1[0])**2 + (cy - p1[1])**2)
+        mag_2 = math.sqrt((cx - p2[0])**2 + (cy - p2[1])**2)
+        mag_3 = math.sqrt((cx - p3[0])**2 + (cy - p3[1])**2)
 
-        d1_x = math.sqrt((mid_1_2_x-p1[0])**2 + (mid_1_2_y - p1[1])**2)
-        d1_y = math.sqrt((cx - mid_1_2_x)**2 + (cy - mid_1_2_y)**2)
-        # mag_1 = 
-        # self.u1 = np.array(d1_x/)
-
+        self.u1 = np.array([(cx - p1[0])/mag_1, (cy - p1[1])/mag_1])
+        self.u2 = np.array([(cx - p2[0])/mag_2, (cy - p2[1])/mag_2])
+        self.u3 = np.array([(cx - p3[0])/mag_3, (cy - p3[1])/mag_3])
 
         # Compute pixel-to-meter ratio using first two points
         pixel_dist = math.sqrt((p2[0] - p1[0])**2 + (p2[1] - p1[1])**2)
@@ -140,7 +153,12 @@ class CameraCalibrator:
                 "upper_hsv": [float(x) for x in self.upper_hsv] if self.upper_hsv else None
             },
             "calibration": {
-                "pixel_to_meter_ratio": float(self.pixel_to_meter_ratio) if self.pixel_to_meter_ratio else None
+                "pixel_to_meter_ratio": float(self.pixel_to_meter_ratio) if self.pixel_to_meter_ratio else None,
+                "unit_vectors": {
+                    "u1": [float(x) for x in self.u1] if len(self.u1) > 0 else None,
+                    "u2": [float(x) for x in self.u2] if len(self.u2) > 0 else None,
+                    "u3": [float(x) for x in self.u3] if len(self.u3) > 0 else None
+                }
             }
         }
 
@@ -178,6 +196,26 @@ class CameraCalibrator:
         if len(self.platform_points) == 3:
             pts = np.array(self.platform_points, np.int32)
             cv2.polylines(overlay, [pts], isClosed=True, color=(255, 0, 0), thickness=2)
+            
+            # Draw unit vectors from each corner point toward center
+            vector_length = 50  # pixels
+            unit_vectors = [self.u1, self.u2, self.u3]
+            colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]  # BGR: Blue, Green, Red
+            
+            for i, (pt, unit_vec, color) in enumerate(zip(self.platform_points, unit_vectors, colors)):
+                if len(unit_vec) > 0:
+                    # Calculate end point of unit vector
+                    end_x = int(pt[0] + unit_vec[0] * vector_length)
+                    end_y = int(pt[1] + unit_vec[1] * vector_length)
+                    end_pt = (end_x, end_y)
+                    
+                    # Draw arrow from point to end point
+                    cv2.arrowedLine(overlay, pt, end_pt, color, 2, tipLength=0.3)
+                    
+                    # Label the vector
+                    cv2.putText(overlay, f"u{i+1}", (end_x+5, end_y-5),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
+        
         if self.center_point:
             cv2.circle(overlay, self.center_point, 8, (0, 255, 255), -1)
             cv2.putText(overlay, "Center", (self.center_point[0]+10, self.center_point[1]),
