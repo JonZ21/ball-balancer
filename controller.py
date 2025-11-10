@@ -12,6 +12,9 @@ def projected_errors (u1, u2, u3, ball_position, s):
     This function will output 3 errors, one for each motor's axis.
     """
     #The 2D error vector:
+    if ball_position is None or s is None:
+        return [0,0,0]
+    
     xy_error = s-ball_position #Element wise numpy subtraction
 
     #Obtain 1D errors by projecting onto the motors axis

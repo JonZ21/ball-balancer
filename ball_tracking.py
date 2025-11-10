@@ -122,50 +122,5 @@ class BallDetector:
         return overlay, found
 
 
-with open("config.json", "r") as f:
-    config = json.load(f) #Open the camera config file. 
-
-detect = BallDetector(config)
-cap = cv2.VideoCapture(config['camera']['index'], cv2.CAP_DSHOW)
-cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-center_point_px = tuple(config['camera']['center_point_px'])
-
-# Create window for ball tracking GUI
-cv2.namedWindow("Ball Tracking - Real-time Detection", cv2.WINDOW_NORMAL)
-cv2.resizeWindow("Ball Tracking - Real-time Detection", 800, 600)
-
-print("[INFO] Ball tracking started. Press 'q' to quit.")
-print("[INFO] Center point marked with white vertical line")
-print("[INFO] Ball position shown with green circle")
-
-while(True):
-    ret, frame = cap.read()
-    if not ret:
-        continue
-    
-    # Draw detection overlay with ball circle and center point
-    overlay, found= detect.draw_detection(frame, center_point_px, show_info=True)
-    
-    # Add additional information panel
-    if found:
-        cv2.putText(overlay, f"Ball Detected: YES", (10, 30),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-    else:
-        cv2.putText(overlay, f"Ball Detected: NO", (10, 30),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-    
-    # Display the frame with overlays
-    cv2.imshow("Ball Tracking - Real-time Detection", overlay)
-    
-    # Exit on 'q' key press
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        print("[INFO] Ball tracking stopped.")
-        break
-
-cap.release()
-cv2.destroyAllWindows()
-
-
-
 
 
