@@ -154,6 +154,7 @@ class CameraCalibrator:
             },
             "calibration": {
                 "pixel_to_meter_ratio": float(self.pixel_to_meter_ratio) if self.pixel_to_meter_ratio else None,
+                "platform_points": [list(pt) for pt in self.platform_points] if len(self.platform_points) == 3 else None,
                 "unit_vectors": {
                     "u1": [float(x) for x in self.u1] if len(self.u1) > 0 else None,
                     "u2": [float(x) for x in self.u2] if len(self.u2) > 0 else None,

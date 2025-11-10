@@ -16,10 +16,13 @@ with open("config.json", "r") as f:
 detect = BallDetector("config.json")
 cap = cv2.VideoCapture(config['camera']['index'], cv2.CAP_DSHOW)
 cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-center_point_px = tuple(config['camera']['center_point_px'])
+# Load and resize calibration data by 2 (divide by 2 for 320x240 frame)
+center_point_px = tuple((np.array(config['camera']['center_point_px']) / 2).astype(int))
+platform_points = [tuple((np.array(pt) / 2).astype(int)) for pt in config['calibration']['platform_points']]
 u1 = np.array(config['calibration']['unit_vectors']['u1'])
 u2 = np.array(config['calibration']['unit_vectors']['u2'])  
 u3 = np.array(config['calibration']['unit_vectors']['u3'])
+u_vectors = [u1, u2, u3]
 
 # Create window for ball tracking GUI
 cv2.namedWindow("Ball Tracking - Real-time Detection", cv2.WINDOW_NORMAL)
@@ -202,11 +205,13 @@ time.sleep(0.5)
 
 while(True):
     ret, frame = cap.read()
+    frame = cv2.resize(frame, (320, 240))
+
     if not ret:
         continue
     
     # Draw detection overlay with ball circle and center point
-    overlay, found= detect.draw_detection(frame, center_point_px, show_info=True)
+    overlay, found= detect.draw_detection(frame, center_point_px, platform_points, u_vectors, show_info=True)
     
     # Add additional information panel
     if found:
@@ -243,11 +248,14 @@ while(True):
 
     # Convert to numpy arrays - only if ball is detected
     if found and x is not None and y is not None:
+        # detect_ball is called on the resized (320x240) frame, so x,y are already in the
+        # resized coordinate system — do NOT divide by 2 here.
         ball_position = np.array([x, y])
     else:
         ball_position = None
-        
-    center = np.array([center_point_px[0], center_point_px[1]])
+
+    # Center point (resized and cast to int earlier)
+    center = np.array(center_point_px)
     
     print("center point px:", center_point_px[0], center_point_px[1])
     print(f"Ball Position: {ball_position}, Center: {center}")

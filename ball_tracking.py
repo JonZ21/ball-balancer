@@ -85,7 +85,7 @@ class BallDetector:
         
         return True, int(x), int(y), radius
 
-    def draw_detection(self, frame, center_point_px=None, show_info=True):
+    def draw_detection(self, frame, center_point_px=None, platform_points = [], u_vectors=[], show_info=True):
         """Detect ball and draw detection overlay on frame.
         
         Args:
@@ -107,7 +107,35 @@ class BallDetector:
             cv2.putText(overlay, f"Center: ({center_point_px[0]}, {center_point_px[1]})", (center_point_px[0] + 10, center_point_px[1] - 10),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
 
+        #  plot center point
         cv2.circle(overlay, (cx,cy), 1, (255, 255, 255), 1)
+
+        # Draw geometry points and triangle
+        for pt in platform_points:
+            cv2.circle(overlay, pt, 6, (0, 255, 0), -1)
+        if len(platform_points) == 3:
+            pts = np.array(platform_points, np.int32)
+            cv2.polylines(overlay, [pts], isClosed=True, color=(255, 0, 0), thickness=2)
+            
+            # Draw unit vectors from each corner point toward center
+            vector_length = 50  # pixels
+            u_vectors
+            colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]  # BGR: Blue, Green, Red
+            
+            for i, (pt, unit_vec, color) in enumerate(zip(platform_points, u_vectors, colors)):
+                if len(unit_vec) > 0:
+                    # Calculate end point of unit vector
+                    end_x = int(pt[0] + unit_vec[0] * vector_length)
+                    end_y = int(pt[1] + unit_vec[1] * vector_length)
+                    end_pt = (end_x, end_y)
+                    
+                    # Draw arrow from point to end point
+                    cv2.arrowedLine(overlay, pt, end_pt, color, 2, tipLength=0.3)
+                    
+                    # Label the vector
+                    cv2.putText(overlay, f"u{i+1}", (end_x+5, end_y-5),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
+        
  
         if found:
             # Draw circle around detected ball
