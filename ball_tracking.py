@@ -104,6 +104,8 @@ class BallDetector:
         
         if center_point_px is not None:
             cv2.circle(overlay, (center_point_px[0], center_point_px[1]), 1, (0, 0, 255), 6)
+            cv2.putText(overlay, f"Center: ({center_point_px[0]}, {center_point_px[1]})", (center_point_px[0] + 10, center_point_px[1] - 10),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
 
         cv2.circle(overlay, (cx,cy), 1, (255, 255, 255), 1)
  
