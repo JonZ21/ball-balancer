@@ -85,7 +85,7 @@ class BallDetector:
         
         return True, int(x), int(y), radius
 
-    def draw_detection(self, frame, show_info=True):
+    def draw_detection(self, frame, center_point_px=None, show_info=True):
         """Detect ball and draw detection overlay on frame.
         
         Args:
@@ -95,34 +95,31 @@ class BallDetector:
         Returns:
             frame_with_overlay: Frame with detection drawn
             found: True if ball detected
-            position_m: Ball position in meters
         """
         # Perform ball detection
-        found, center, radius, position_m = self.detect_ball(frame)
+        found, cx, cy, radius = self.detect_ball(frame)
         
         # Create overlay copy for drawing
         overlay = frame.copy()
         
-        # Draw vertical center reference line
-        height, width = frame.shape[:2]
-        center_x = width // 2
-        cv2.line(overlay, (center_x, 0), (center_x, height), (255, 255, 255), 1)
-        cv2.putText(overlay, "Center", (center_x + 5, 20),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        
+        if center_point_px is not None:
+            cv2.circle(overlay, (center_point_px[0], center_point_px[1]), 1, (0, 0, 255), 6)
+            cv2.putText(overlay, f"Center: ({center_point_px[0]}, {center_point_px[1]})", (center_point_px[0] + 10, center_point_px[1] - 10),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+
+        cv2.circle(overlay, (cx,cy), 1, (255, 255, 255), 1)
+ 
         if found:
             # Draw circle around detected ball
-            cv2.circle(overlay, center, int(radius), (0, 255, 0), 2)  # Green circle
-            cv2.circle(overlay, center, 3, (0, 255, 0), -1)  # Green center dot
+            cv2.circle(overlay, (cx,cy), int(radius), (0, 255, 0), 2)  # Green circle
+            cv2.circle(overlay, (cx,cy), 3, (0, 255, 0), -1)  # Green center dot
             
             if show_info:
                 # Display ball position information
-                cv2.putText(overlay, f"x: {center[0]}", (center[0] - 30, center[1] - 40),
+                cv2.putText(overlay, f"x: {cx}, y: {cy}", (cx - 30, cy- 40),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
-                cv2.putText(overlay, f"pos: {position_m:.4f}m", (center[0] - 40, center[1] - 20),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
-        
-        return overlay, found, position_m
+
+        return overlay, found
 
 
 with open("config.json", "r") as f:
@@ -131,15 +128,42 @@ with open("config.json", "r") as f:
 detect = BallDetector(config)
 cap = cv2.VideoCapture(config['camera']['index'], cv2.CAP_DSHOW)
 cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+center_point_px = tuple(config['camera']['center_point_px'])
+
+# Create window for ball tracking GUI
+cv2.namedWindow("Ball Tracking - Real-time Detection", cv2.WINDOW_NORMAL)
+cv2.resizeWindow("Ball Tracking - Real-time Detection", 800, 600)
+
+print("[INFO] Ball tracking started. Press 'q' to quit.")
+print("[INFO] Center point marked with white vertical line")
+print("[INFO] Ball position shown with green circle")
+
 while(True):
     ret, frame = cap.read()
-    # frame = frame = cv2.resize(frame, (320, 240)) #resize the frame to the same as 1D balancer for faster processing.
     if not ret:
         continue
-    print("frame returned", detect.detect_ball(frame))
-    found, x,y, radius = detect.detect_ball(frame)
-    if x is None or y is None:
-        continue
+    
+    # Draw detection overlay with ball circle and center point
+    overlay, found= detect.draw_detection(frame, center_point_px, show_info=True)
+    
+    # Add additional information panel
+    if found:
+        cv2.putText(overlay, f"Ball Detected: YES", (10, 30),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+    else:
+        cv2.putText(overlay, f"Ball Detected: NO", (10, 30),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+    
+    # Display the frame with overlays
+    cv2.imshow("Ball Tracking - Real-time Detection", overlay)
+    
+    # Exit on 'q' key press
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        print("[INFO] Ball tracking stopped.")
+        break
+
+cap.release()
+cv2.destroyAllWindows()
 
 
 
