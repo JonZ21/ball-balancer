@@ -80,12 +80,15 @@ class PIDTuningGUI:
         self.motor3_pid = motor3_pid
         
         self.root.title("PID Tuning")
-        self.root.geometry("350x450+850+100")  # Position window beside video feed (x=850, y=100)
+        # Slightly taller window to ensure the Send button is visible on high-DPI displays
+        self.root.geometry("350x520+850+100")  # Position window beside video feed (x=850, y=100)
         self.root.resizable(False, False)
         
         # Main frame
         main_frame = ttk.Frame(root, padding="10")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        # Make columns expand so widgets like the Send button stretch to full width
+        main_frame.columnconfigure(0, weight=1)
         
         # Title
         title_label = ttk.Label(main_frame, text="PID Gain Tuning", font=("Arial", 16, "bold"))
@@ -129,9 +132,9 @@ class PIDTuningGUI:
         self.current_kd_label.grid(row=2, column=0, sticky=tk.W, pady=2)
         
         # Send button
-        send_button = ttk.Button(main_frame, text="Send", command=self.send_pid_values, 
-                                 width=20)
-        send_button.grid(row=8, column=0, columnspan=3, pady=20)
+        send_button = ttk.Button(main_frame, text="Send", command=self.send_pid_values)
+        # Make the Send button stretch horizontally and ensure it's visible
+        send_button.grid(row=8, column=0, columnspan=3, pady=20, sticky=(tk.E, tk.W))
         
         # Update current values periodically
         self.update_current_values()
