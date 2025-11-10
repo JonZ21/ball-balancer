@@ -1,6 +1,6 @@
 import numpy as np
 
-def project_error (u1, u2, u3, ball_position, s):
+def projected_errors (u1, u2, u3, ball_position, s):
     """Arguments: 
     u1, u2, u3 are the unit vectors (magnitude of 1)
     for each motor's axis on the stewart platform. They are an (x,y) list
@@ -41,3 +41,4 @@ class PIDcontroller:
         output = np.clip(output, self.min_output_angle, self.max_output_angle)
         
         return output
+    
