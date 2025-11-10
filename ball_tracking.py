@@ -85,7 +85,7 @@ class BallDetector:
         
         return True, int(x), int(y), radius
 
-    def draw_detection(self, frame, show_info=True):
+    def draw_detection(self, frame, center_point_px=None, show_info=True):
         """Detect ball and draw detection overlay on frame.
         
         Args:
@@ -102,13 +102,11 @@ class BallDetector:
         # Create overlay copy for drawing
         overlay = frame.copy()
         
-        # Draw vertical center reference line
-        height, width = frame.shape[:2]
-        center_x = width // 2
-        cv2.line(overlay, (center_x, 0), (center_x, height), (255, 255, 255), 1)
-        cv2.putText(overlay, "Center", (center_x + 5, 20),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        
+        if center_point_px is not None:
+            cv2.circle(overlay, (center_point_px[0], center_point_px[1]), 1, (0, 0, 255), 6)
+
+        cv2.circle(overlay, (cx,cy), 1, (255, 255, 255), 1)
+ 
         if found:
             # Draw circle around detected ball
             cv2.circle(overlay, (cx,cy), int(radius), (0, 255, 0), 2)  # Green circle
@@ -116,7 +114,7 @@ class BallDetector:
             
             if show_info:
                 # Display ball position information
-                cv2.putText(overlay, f"x: {cx}", (cx - 30, cy- 40),
+                cv2.putText(overlay, f"x: {cx}, y: {cy}", (cx - 30, cy- 40),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
 
         return overlay, found
@@ -128,6 +126,7 @@ with open("config.json", "r") as f:
 detect = BallDetector(config)
 cap = cv2.VideoCapture(config['camera']['index'], cv2.CAP_DSHOW)
 cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+center_point_px = tuple(config['camera']['center_point_px'])
 
 # Create window for ball tracking GUI
 cv2.namedWindow("Ball Tracking - Real-time Detection", cv2.WINDOW_NORMAL)
@@ -143,7 +142,7 @@ while(True):
         continue
     
     # Draw detection overlay with ball circle and center point
-    overlay, found= detect.draw_detection(frame, show_info=True)
+    overlay, found= detect.draw_detection(frame, center_point_px, show_info=True)
     
     # Add additional information panel
     if found:
