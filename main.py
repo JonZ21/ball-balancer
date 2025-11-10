@@ -1,10 +1,18 @@
 import ball_tracking
 import camera_calibration
 from controller import projected_errors, PIDcontroller
+import serial
 
 #Placeholder to import the config code, obtain each unit vector for the axis
 #import the centroid location
 #setup for ball tracking as necessary
+
+#establish connection to serial port
+serial_port = serial()
+serial_port.connect_serial()
+
+#Send neutral angles to the motors on startup
+serial_port.send_servo_angles(10, 10, 10)
 
 #initialize PID controllers
 Kp = 1
