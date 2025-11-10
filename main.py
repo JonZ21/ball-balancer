@@ -5,11 +5,15 @@ from ball_tracking import BallDetector
 import cv2
 import json
 import numpy as np
+import tkinter as tk
+from tkinter import ttk
+import threading
+import time
 
 with open("config.json", "r") as f:
     config = json.load(f) #Open the camera config file. 
 
-detect = BallDetector(config)
+detect = BallDetector("config.json")
 cap = cv2.VideoCapture(config['camera']['index'], cv2.CAP_DSHOW)
 cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 center_point_px = tuple(config['camera']['center_point_px'])
@@ -22,8 +26,10 @@ cv2.namedWindow("Ball Tracking - Real-time Detection", cv2.WINDOW_NORMAL)
 cv2.resizeWindow("Ball Tracking - Real-time Detection", 800, 600)
 
 print("[INFO] Ball tracking started. Press 'q' to quit.")
-print("[INFO] Center point marked with white vertical line")
+print("[INFO] Use PID Tuning GUI to adjust Kp, Ki, Kd values and click 'Send' to update")
+print("[INFO] Center point marked with red dot")
 print("[INFO] Ball position shown with green circle")
+print("[INFO] Current PID values displayed on video feed")
 
 
 # Placeholder to import the config code, obtain each unit vector for the axis
@@ -39,8 +45,14 @@ serial_port.send_servo_angles(10, 10, 10)
 
 #initialize PID controllers
 Kp = 0.1
-Kd = 0
-Ki = 0
+Kd = 0.0
+Ki = 0.0
+
+# PID tuning ranges for sliders
+Kp_max = 2.0
+Ki_max = 1.0
+Kd_max = 1.0
+slider_resolution = 1000  # Higher resolution for finer tuning
 
 #Using placeholder motor angles for now, validate for each motor.
 min_motor_angle = 0
@@ -49,6 +61,144 @@ max_motor_angle = 20
 motor1_pid = PIDcontroller(Kp, Kd, Ki, min_motor_angle, max_motor_angle)
 motor2_pid = PIDcontroller(Kp, Kd, Ki, min_motor_angle +6, max_motor_angle +6)
 motor3_pid = PIDcontroller(Kp, Kd, Ki, min_motor_angle, max_motor_angle)
+
+# Global variables for GUI
+pid_gains_lock = threading.Lock()
+current_kp = Kp
+current_ki = Ki
+current_kd = Kd
+
+# PID Tuning GUI Class
+class PIDTuningGUI:
+    def __init__(self, root, motor1_pid, motor2_pid, motor3_pid):
+        self.root = root
+        self.motor1_pid = motor1_pid
+        self.motor2_pid = motor2_pid
+        self.motor3_pid = motor3_pid
+        
+        self.root.title("PID Tuning")
+        self.root.geometry("350x450+850+100")  # Position window beside video feed (x=850, y=100)
+        self.root.resizable(False, False)
+        
+        # Main frame
+        main_frame = ttk.Frame(root, padding="10")
+        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        # Title
+        title_label = ttk.Label(main_frame, text="PID Gain Tuning", font=("Arial", 16, "bold"))
+        title_label.grid(row=0, column=0, columnspan=3, pady=(0, 20))
+        
+        # Kp slider
+        self.kp_label = ttk.Label(main_frame, text=f"Kp: {Kp:.4f}", font=("Arial", 12))
+        self.kp_label.grid(row=1, column=0, columnspan=3, pady=5)
+        self.kp_scale = ttk.Scale(main_frame, from_=0, to=Kp_max, length=300, 
+                                   orient=tk.HORIZONTAL, command=self.update_kp_label)
+        self.kp_scale.set(Kp)
+        self.kp_scale.grid(row=2, column=0, columnspan=3, pady=5)
+        
+        # Ki slider
+        self.ki_label = ttk.Label(main_frame, text=f"Ki: {Ki:.4f}", font=("Arial", 12))
+        self.ki_label.grid(row=3, column=0, columnspan=3, pady=5)
+        self.ki_scale = ttk.Scale(main_frame, from_=0, to=Ki_max, length=300, 
+                                   orient=tk.HORIZONTAL, command=self.update_ki_label)
+        self.ki_scale.set(Ki)
+        self.ki_scale.grid(row=4, column=0, columnspan=3, pady=5)
+        
+        # Kd slider
+        self.kd_label = ttk.Label(main_frame, text=f"Kd: {Kd:.4f}", font=("Arial", 12))
+        self.kd_label.grid(row=5, column=0, columnspan=3, pady=5)
+        self.kd_scale = ttk.Scale(main_frame, from_=0, to=Kd_max, length=300, 
+                                   orient=tk.HORIZONTAL, command=self.update_kd_label)
+        self.kd_scale.set(Kd)
+        self.kd_scale.grid(row=6, column=0, columnspan=3, pady=5)
+        
+        # Current values display
+        current_frame = ttk.LabelFrame(main_frame, text="Current Values", padding="10")
+        current_frame.grid(row=7, column=0, columnspan=3, pady=20, sticky=(tk.W, tk.E))
+        
+        self.current_kp_label = ttk.Label(current_frame, text=f"Kp: {Kp:.4f}", font=("Arial", 10))
+        self.current_kp_label.grid(row=0, column=0, sticky=tk.W, pady=2)
+        
+        self.current_ki_label = ttk.Label(current_frame, text=f"Ki: {Ki:.4f}", font=("Arial", 10))
+        self.current_ki_label.grid(row=1, column=0, sticky=tk.W, pady=2)
+        
+        self.current_kd_label = ttk.Label(current_frame, text=f"Kd: {Kd:.4f}", font=("Arial", 10))
+        self.current_kd_label.grid(row=2, column=0, sticky=tk.W, pady=2)
+        
+        # Send button
+        send_button = ttk.Button(main_frame, text="Send", command=self.send_pid_values, 
+                                 width=20)
+        send_button.grid(row=8, column=0, columnspan=3, pady=20)
+        
+        # Update current values periodically
+        self.update_current_values()
+    
+    def update_kp_label(self, value):
+        """Update Kp label as slider moves."""
+        kp_val = float(value)
+        self.kp_label.config(text=f"Kp: {kp_val:.4f}")
+    
+    def update_ki_label(self, value):
+        """Update Ki label as slider moves."""
+        ki_val = float(value)
+        self.ki_label.config(text=f"Ki: {ki_val:.4f}")
+    
+    def update_kd_label(self, value):
+        """Update Kd label as slider moves."""
+        kd_val = float(value)
+        self.kd_label.config(text=f"Kd: {kd_val:.4f}")
+    
+    def send_pid_values(self):
+        """Update PID controllers with slider values."""
+        global current_kp, current_ki, current_kd
+        
+        kp_val = self.kp_scale.get()
+        ki_val = self.ki_scale.get()
+        kd_val = self.kd_scale.get()
+        
+        with pid_gains_lock:
+            current_kp = kp_val
+            current_ki = ki_val
+            current_kd = kd_val
+        
+        # Update all PID controllers
+        self.motor1_pid.update_gains(Kp=kp_val, Ki=ki_val, Kd=kd_val)
+        self.motor2_pid.update_gains(Kp=kp_val, Ki=ki_val, Kd=kd_val)
+        self.motor3_pid.update_gains(Kp=kp_val, Ki=ki_val, Kd=kd_val)
+        
+        print(f"[PID] Updated gains - Kp: {kp_val:.4f}, Ki: {ki_val:.4f}, Kd: {kd_val:.4f}")
+    
+    def update_current_values(self):
+        """Update displayed current values."""
+        global current_kp, current_ki, current_kd
+        
+        with pid_gains_lock:
+            kp = current_kp
+            ki = current_ki
+            kd = current_kd
+        
+        self.current_kp_label.config(text=f"Kp: {kp:.4f}")
+        self.current_ki_label.config(text=f"Ki: {ki:.4f}")
+        self.current_kd_label.config(text=f"Kd: {kd:.4f}")
+        
+        # Schedule next update
+        self.root.after(100, self.update_current_values)
+
+def run_gui():
+    """Run the PID tuning GUI in a separate thread."""
+    root = tk.Tk()
+    app = PIDTuningGUI(root, motor1_pid, motor2_pid, motor3_pid)
+    try:
+        root.mainloop()
+    except KeyboardInterrupt:
+        pass
+
+# Start GUI in a separate thread
+gui_thread = threading.Thread(target=run_gui, daemon=True)
+gui_thread.start()
+
+# Small delay to allow GUI to initialize
+time.sleep(0.5)
 
 while(True):
     ret, frame = cap.read()
@@ -65,6 +215,19 @@ while(True):
     else:
         cv2.putText(overlay, f"Ball Detected: NO", (10, 30),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+    
+    # Display current PID values on overlay
+    with pid_gains_lock:
+        display_kp = current_kp
+        display_ki = current_ki
+        display_kd = current_kd
+    
+    cv2.putText(overlay, f"Kp: {display_kp:.4f}", (10, 60),
+               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+    cv2.putText(overlay, f"Ki: {display_ki:.4f}", (10, 90),
+               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+    cv2.putText(overlay, f"Kd: {display_kd:.4f}", (10, 120),
+               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
     
     # Display the frame with overlays
     cv2.imshow("Ball Tracking - Real-time Detection", overlay)

@@ -34,6 +34,21 @@ class PIDcontroller:
         self.max_output_angle = max_motor_angle   # degrees (20 = down)
         self.neutral_angle = 10  # Neutral/resting position
 
+    def update_gains(self, Kp=None, Ki=None, Kd=None):
+        """Update PID gains in real-time.
+        
+        Args:
+            Kp: New proportional gain (None to keep current)
+            Ki: New integral gain (None to keep current)
+            Kd: New derivative gain (None to keep current)
+        """
+        if Kp is not None:
+            self.Kp = Kp
+        if Ki is not None:
+            self.Ki = Ki
+        if Kd is not None:
+            self.Kd = Kd
+    
     def update(self, error, dt=0.033): #default dt is ~30fps the inverse of that is the seconds
         # Proportional term
         P = self.Kp * error
