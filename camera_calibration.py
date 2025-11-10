@@ -1,5 +1,23 @@
-#obtain calibration data necessary to test ball tracking on the stewart platform. 
-#most functions are from the 1D balancer simple_cal file, but with the motor calibration removed. 
+
+################################################################################
+#                                                                              #
+#                         CAMERA CALIBRATION SYSTEM                           #
+#                                                                              #
+#  INPUT:    Camera feed from computer vision camera                          #
+#  PROCESS:  Interactive GUI-based calibration tool                           #
+#  OUTPUT:   config.json with calibration parameters                          #
+#                                                                              #
+#  CONFIG.JSON CONTAINS:                                                       #
+#  ├── timestamp: ISO format timestamp of calibration                         #
+#  ├── camera: Camera settings and center point in pixels                     #
+#  ├── ball_detection: HSV color range for ball detection                     #
+#  └── calibration:                                                           #
+#      ├── pixel_to_meter_ratio: Conversion factor (meters per pixel)         #
+#      └── unit_vectors: [u1, u2, u3] - normalized vectors from corners      #
+#                        pointing toward platform center                       #
+#                                                                              #
+################################################################################
+
 
 import cv2
 import numpy as np
