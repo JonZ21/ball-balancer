@@ -19,3 +19,25 @@ def project_error (u1, u2, u3, ball_position, s):
     errors= [np.dot(u1, xy_error), np.dot(u2, xy_error), np.dot(u3, xy_error)] 
 
     return errors
+
+class PIDcontroller:
+    def __init__(self, Kp, Ki, Kd):
+        self.Kp = Kp
+        self.Ki = Ki
+        self.Kd = Kd
+        self.previous_error = 0
+        self.integral = 0
+        self.min_output_angle = 0  # degrees
+        self.max_output_angle = 20   # degrees
+
+    def update(self, error, dt=0.033): #default dt is ~30fps the inverse of that is the seconds
+        # Proportional term
+        P = self.Kp * error
+        self.integral += error * dt
+        I = self.Ki * self.integral
+        D = self.Kd * (error - self.previous_error) / dt
+
+        output = P + I + D
+        output = np.clip(output, self.min_output_angle, self.max_output_angle)
+        
+        return output
