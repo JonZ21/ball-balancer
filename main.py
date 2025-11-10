@@ -13,9 +13,11 @@ detect = BallDetector(config)
 cap = cv2.VideoCapture(config['camera']['index'], cv2.CAP_DSHOW)
 cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 center_point_px = tuple(config['camera']['center_point_px'])
+platform_points = [tuple(pt) for pt in config['calibration']['platform_points']]
 u1 = np.array(config['calibration']['unit_vectors']['u1'])
 u2 = np.array(config['calibration']['unit_vectors']['u2'])  
 u3 = np.array(config['calibration']['unit_vectors']['u3'])
+u_vectors = [u1, u2, u3]
 
 # Create window for ball tracking GUI
 cv2.namedWindow("Ball Tracking - Real-time Detection", cv2.WINDOW_NORMAL)
@@ -38,8 +40,8 @@ serial_port.connect_serial()
 serial_port.send_servo_angles(10, 10, 10)
 
 #initialize PID controllers
-Kp = 0.1
-Kd = 0
+Kp = 0.15
+Kd = -0.03
 Ki = 0
 
 #Using placeholder motor angles for now, validate for each motor.
@@ -52,11 +54,13 @@ motor3_pid = PIDcontroller(Kp, Kd, Ki, min_motor_angle, max_motor_angle)
 
 while(True):
     ret, frame = cap.read()
+    frame = cv2.resize(frame, (320, 240))
+
     if not ret:
         continue
     
     # Draw detection overlay with ball circle and center point
-    overlay, found= detect.draw_detection(frame, center_point_px, show_info=True)
+    overlay, found= detect.draw_detection(frame, center_point_px, platform_points, u_vectors, show_info=True)
     
     # Add additional information panel
     if found:
