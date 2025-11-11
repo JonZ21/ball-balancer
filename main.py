@@ -53,7 +53,7 @@ Ki = 0.0
 
 # PID tuning ranges for sliders
 Kp_max = 2.0
-Ki_max = 1.0
+Ki_max = 0.01
 Kd_max = 1.0
 slider_resolution = 1000  # Higher resolution for finer tuning
 
