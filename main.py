@@ -47,9 +47,9 @@ serial_port.connect_serial()
 serial_port.send_servo_angles(10, 10, 10)
 
 #initialize PID controllers
-Kp = 0.1
-Kd = 0.0
-Ki = 0.0
+Kp = 0.1606
+Kd = 0.1376
+Ki = 0.0688
 
 # PID tuning ranges for sliders
 Kp_max = 1
