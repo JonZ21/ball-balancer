@@ -78,64 +78,73 @@ class PIDTuningGUI:
         self.motor1_pid = motor1_pid
         self.motor2_pid = motor2_pid
         self.motor3_pid = motor3_pid
-        
+
         self.root.title("PID Tuning")
-        # Slightly taller window to ensure the Send button is visible on high-DPI displays
-        self.root.geometry("350x520+850+100")  # Position window beside video feed (x=850, y=100)
+        # Larger window for better visibility
+        self.root.geometry("550x700+850+100")  # Position window beside video feed (x=850, y=100)
         self.root.resizable(False, False)
-        
+
         # Main frame
-        main_frame = ttk.Frame(root, padding="10")
+        main_frame = ttk.Frame(root, padding="20")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         # Make columns expand so widgets like the Send button stretch to full width
         main_frame.columnconfigure(0, weight=1)
-        
+
         # Title
-        title_label = ttk.Label(main_frame, text="PID Gain Tuning", font=("Arial", 16, "bold"))
-        title_label.grid(row=0, column=0, columnspan=3, pady=(0, 20))
-        
+        title_label = ttk.Label(main_frame, text="PID Gain Tuning", font=("Arial", 20, "bold"))
+        title_label.grid(row=0, column=0, columnspan=3, pady=(0, 30))
+
         # Kp slider
-        self.kp_label = ttk.Label(main_frame, text=f"Kp: {Kp:.4f}", font=("Arial", 12))
-        self.kp_label.grid(row=1, column=0, columnspan=3, pady=5)
-        self.kp_scale = ttk.Scale(main_frame, from_=0, to=Kp_max, length=300, 
+        self.kp_label = ttk.Label(main_frame, text=f"Kp: {Kp:.4f}", font=("Arial", 16))
+        self.kp_label.grid(row=1, column=0, columnspan=3, pady=10)
+        self.kp_scale = ttk.Scale(main_frame, from_=0, to=Kp_max, length=450,
                                    orient=tk.HORIZONTAL, command=self.update_kp_label)
         self.kp_scale.set(Kp)
-        self.kp_scale.grid(row=2, column=0, columnspan=3, pady=5)
-        
+        self.kp_scale.grid(row=2, column=0, columnspan=3, pady=10)
+
         # Ki slider
-        self.ki_label = ttk.Label(main_frame, text=f"Ki: {Ki:.4f}", font=("Arial", 12))
-        self.ki_label.grid(row=3, column=0, columnspan=3, pady=5)
-        self.ki_scale = ttk.Scale(main_frame, from_=0, to=Ki_max, length=300, 
+        self.ki_label = ttk.Label(main_frame, text=f"Ki: {Ki:.4f}", font=("Arial", 16))
+        self.ki_label.grid(row=3, column=0, columnspan=3, pady=10)
+        self.ki_scale = ttk.Scale(main_frame, from_=0, to=Ki_max, length=450,
                                    orient=tk.HORIZONTAL, command=self.update_ki_label)
         self.ki_scale.set(Ki)
-        self.ki_scale.grid(row=4, column=0, columnspan=3, pady=5)
-        
+        self.ki_scale.grid(row=4, column=0, columnspan=3, pady=10)
+
         # Kd slider
-        self.kd_label = ttk.Label(main_frame, text=f"Kd: {Kd:.4f}", font=("Arial", 12))
-        self.kd_label.grid(row=5, column=0, columnspan=3, pady=5)
-        self.kd_scale = ttk.Scale(main_frame, from_=0, to=Kd_max, length=300, 
+        self.kd_label = ttk.Label(main_frame, text=f"Kd: {Kd:.4f}", font=("Arial", 16))
+        self.kd_label.grid(row=5, column=0, columnspan=3, pady=10)
+        self.kd_scale = ttk.Scale(main_frame, from_=0, to=Kd_max, length=450,
                                    orient=tk.HORIZONTAL, command=self.update_kd_label)
         self.kd_scale.set(Kd)
-        self.kd_scale.grid(row=6, column=0, columnspan=3, pady=5)
-        
+        self.kd_scale.grid(row=6, column=0, columnspan=3, pady=10)
+
         # Current values display
-        current_frame = ttk.LabelFrame(main_frame, text="Current Values", padding="10")
-        current_frame.grid(row=7, column=0, columnspan=3, pady=20, sticky=(tk.W, tk.E))
-        
-        self.current_kp_label = ttk.Label(current_frame, text=f"Kp: {Kp:.4f}", font=("Arial", 10))
-        self.current_kp_label.grid(row=0, column=0, sticky=tk.W, pady=2)
-        
-        self.current_ki_label = ttk.Label(current_frame, text=f"Ki: {Ki:.4f}", font=("Arial", 10))
-        self.current_ki_label.grid(row=1, column=0, sticky=tk.W, pady=2)
-        
-        self.current_kd_label = ttk.Label(current_frame, text=f"Kd: {Kd:.4f}", font=("Arial", 10))
-        self.current_kd_label.grid(row=2, column=0, sticky=tk.W, pady=2)
-        
+        current_frame = ttk.LabelFrame(main_frame, text="Current Values", padding="15")
+        current_frame.grid(row=7, column=0, columnspan=3, pady=25, sticky=(tk.W, tk.E))
+
+        self.current_kp_label = ttk.Label(current_frame, text=f"Kp: {Kp:.4f}", font=("Arial", 14))
+        self.current_kp_label.grid(row=0, column=0, sticky=tk.W, pady=5)
+
+        self.current_ki_label = ttk.Label(current_frame, text=f"Ki: {Ki:.4f}", font=("Arial", 14))
+        self.current_ki_label.grid(row=1, column=0, sticky=tk.W, pady=5)
+
+        self.current_kd_label = ttk.Label(current_frame, text=f"Kd: {Kd:.4f}", font=("Arial", 14))
+        self.current_kd_label.grid(row=2, column=0, sticky=tk.W, pady=5)
+
         # Send button
         send_button = ttk.Button(main_frame, text="Send", command=self.send_pid_values)
         # Make the Send button stretch horizontally and ensure it's visible
-        send_button.grid(row=8, column=0, columnspan=3, pady=20, sticky=(tk.E, tk.W))
-        
+        send_button.grid(row=8, column=0, columnspan=3, pady=15, sticky=(tk.E, tk.W))
+        # Configure button style to make it bigger
+        style = ttk.Style()
+        style.configure('Big.TButton', font=('Arial', 14))
+        send_button.configure(style='Big.TButton')
+
+        # Reset Integral button
+        reset_button = ttk.Button(main_frame, text="Reset Integral Error", command=self.reset_integral)
+        reset_button.grid(row=9, column=0, columnspan=3, pady=10, sticky=(tk.E, tk.W))
+        reset_button.configure(style='Big.TButton')
+
         # Update current values periodically
         self.update_current_values()
     
@@ -157,23 +166,30 @@ class PIDTuningGUI:
     def send_pid_values(self):
         """Update PID controllers with slider values."""
         global current_kp, current_ki, current_kd
-        
+
         kp_val = self.kp_scale.get()
         ki_val = self.ki_scale.get()
         kd_val = self.kd_scale.get()
-        
+
         with pid_gains_lock:
             current_kp = kp_val
             current_ki = ki_val
             current_kd = kd_val
-        
+
         # Update all PID controllers
         self.motor1_pid.update_gains(Kp=kp_val, Ki=ki_val, Kd=kd_val)
         self.motor2_pid.update_gains(Kp=kp_val, Ki=ki_val, Kd=kd_val)
         self.motor3_pid.update_gains(Kp=kp_val, Ki=ki_val, Kd=kd_val)
-        
+
         print(f"[PID] Updated gains - Kp: {kp_val:.4f}, Ki: {ki_val:.4f}, Kd: {kd_val:.4f}")
-    
+
+    def reset_integral(self):
+        """Reset integral error for all PID controllers."""
+        self.motor1_pid.reset_integral()
+        self.motor2_pid.reset_integral()
+        self.motor3_pid.reset_integral()
+        print("[PID] Integral error reset for all controllers")
+
     def update_current_values(self):
         """Update displayed current values."""
         global current_kp, current_ki, current_kd

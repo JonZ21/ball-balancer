@@ -49,6 +49,10 @@ class PIDcontroller:
         if Kd is not None:
             self.Kd = Kd
     
+    def reset_integral(self):
+        """Reset the integral error accumulator to zero."""
+        self.integral = 0
+
     def update(self, error, dt=0.033): #default dt is ~30fps the inverse of that is the seconds
         # Proportional term
         P = self.Kp * error
@@ -58,11 +62,11 @@ class PIDcontroller:
 
         # Calculate output relative to neutral angle (10 degrees)
         output = self.neutral_angle + (P + I + D)
-        
+
         # Clip to valid range [0, 20] where 0=up, 10=neutral, 20=down
         output = np.clip(output, self.min_output_angle, self.max_output_angle)
-        
+
         self.previous_error = error
-        
+
         return output
-    
+
