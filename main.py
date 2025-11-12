@@ -57,6 +57,10 @@ Ki_max = 0.01
 Kd_max = 1.0
 slider_resolution = 1000  # Higher resolution for finer tuning
 
+# Deadzone settings
+deadzone_radius = 10.0  # pixels
+deadzone_max = 50.0  # maximum deadzone radius
+
 #Using placeholder motor angles for now, validate for each motor.
 min_motor_angle = 0
 max_motor_angle = 20
@@ -70,6 +74,7 @@ pid_gains_lock = threading.Lock()
 current_kp = Kp
 current_ki = Ki
 current_kd = Kd
+current_deadzone = deadzone_radius
 
 # PID Tuning GUI Class
 class PIDTuningGUI:
@@ -81,7 +86,7 @@ class PIDTuningGUI:
 
         self.root.title("PID Tuning")
         # Larger window for better visibility
-        self.root.geometry("550x700+850+100")  # Position window beside video feed (x=850, y=100)
+        self.root.geometry("550x800+850+100")  # Position window beside video feed (x=850, y=100)
         self.root.resizable(False, False)
 
         # Main frame
@@ -118,9 +123,17 @@ class PIDTuningGUI:
         self.kd_scale.set(Kd)
         self.kd_scale.grid(row=6, column=0, columnspan=3, pady=10)
 
+        # Deadzone slider
+        self.deadzone_label = ttk.Label(main_frame, text=f"Deadzone: {deadzone_radius:.1f} px", font=("Arial", 16))
+        self.deadzone_label.grid(row=7, column=0, columnspan=3, pady=10)
+        self.deadzone_scale = ttk.Scale(main_frame, from_=0, to=deadzone_max, length=450,
+                                         orient=tk.HORIZONTAL, command=self.update_deadzone_label)
+        self.deadzone_scale.set(deadzone_radius)
+        self.deadzone_scale.grid(row=8, column=0, columnspan=3, pady=10)
+
         # Current values display
         current_frame = ttk.LabelFrame(main_frame, text="Current Values", padding="15")
-        current_frame.grid(row=7, column=0, columnspan=3, pady=25, sticky=(tk.W, tk.E))
+        current_frame.grid(row=9, column=0, columnspan=3, pady=25, sticky=(tk.W, tk.E))
 
         self.current_kp_label = ttk.Label(current_frame, text=f"Kp: {Kp:.4f}", font=("Arial", 14))
         self.current_kp_label.grid(row=0, column=0, sticky=tk.W, pady=5)
@@ -131,10 +144,13 @@ class PIDTuningGUI:
         self.current_kd_label = ttk.Label(current_frame, text=f"Kd: {Kd:.4f}", font=("Arial", 14))
         self.current_kd_label.grid(row=2, column=0, sticky=tk.W, pady=5)
 
+        self.current_deadzone_label = ttk.Label(current_frame, text=f"Deadzone: {deadzone_radius:.1f} px", font=("Arial", 14))
+        self.current_deadzone_label.grid(row=3, column=0, sticky=tk.W, pady=5)
+
         # Send button
         send_button = ttk.Button(main_frame, text="Send", command=self.send_pid_values)
         # Make the Send button stretch horizontally and ensure it's visible
-        send_button.grid(row=8, column=0, columnspan=3, pady=15, sticky=(tk.E, tk.W))
+        send_button.grid(row=10, column=0, columnspan=3, pady=15, sticky=(tk.E, tk.W))
         # Configure button style to make it bigger
         style = ttk.Style()
         style.configure('Big.TButton', font=('Arial', 14))
@@ -142,7 +158,7 @@ class PIDTuningGUI:
 
         # Reset Integral button
         reset_button = ttk.Button(main_frame, text="Reset Integral Error", command=self.reset_integral)
-        reset_button.grid(row=9, column=0, columnspan=3, pady=10, sticky=(tk.E, tk.W))
+        reset_button.grid(row=11, column=0, columnspan=3, pady=10, sticky=(tk.E, tk.W))
         reset_button.configure(style='Big.TButton')
 
         # Update current values periodically
@@ -162,26 +178,33 @@ class PIDTuningGUI:
         """Update Kd label as slider moves."""
         kd_val = float(value)
         self.kd_label.config(text=f"Kd: {kd_val:.4f}")
-    
+
+    def update_deadzone_label(self, value):
+        """Update Deadzone label as slider moves."""
+        deadzone_val = float(value)
+        self.deadzone_label.config(text=f"Deadzone: {deadzone_val:.1f} px")
+
     def send_pid_values(self):
         """Update PID controllers with slider values."""
-        global current_kp, current_ki, current_kd
+        global current_kp, current_ki, current_kd, current_deadzone
 
         kp_val = self.kp_scale.get()
         ki_val = self.ki_scale.get()
         kd_val = self.kd_scale.get()
+        deadzone_val = self.deadzone_scale.get()
 
         with pid_gains_lock:
             current_kp = kp_val
             current_ki = ki_val
             current_kd = kd_val
+            current_deadzone = deadzone_val
 
         # Update all PID controllers
         self.motor1_pid.update_gains(Kp=kp_val, Ki=ki_val, Kd=kd_val)
         self.motor2_pid.update_gains(Kp=kp_val, Ki=ki_val, Kd=kd_val)
         self.motor3_pid.update_gains(Kp=kp_val, Ki=ki_val, Kd=kd_val)
 
-        print(f"[PID] Updated gains - Kp: {kp_val:.4f}, Ki: {ki_val:.4f}, Kd: {kd_val:.4f}")
+        print(f"[PID] Updated gains - Kp: {kp_val:.4f}, Ki: {ki_val:.4f}, Kd: {kd_val:.4f}, Deadzone: {deadzone_val:.1f} px")
 
     def reset_integral(self):
         """Reset integral error for all PID controllers."""
@@ -192,17 +215,19 @@ class PIDTuningGUI:
 
     def update_current_values(self):
         """Update displayed current values."""
-        global current_kp, current_ki, current_kd
-        
+        global current_kp, current_ki, current_kd, current_deadzone
+
         with pid_gains_lock:
             kp = current_kp
             ki = current_ki
             kd = current_kd
-        
+            deadzone = current_deadzone
+
         self.current_kp_label.config(text=f"Kp: {kp:.4f}")
         self.current_ki_label.config(text=f"Ki: {ki:.4f}")
         self.current_kd_label.config(text=f"Kd: {kd:.4f}")
-        
+        self.current_deadzone_label.config(text=f"Deadzone: {deadzone:.1f} px")
+
         # Schedule next update
         self.root.after(100, self.update_current_values)
 
@@ -245,14 +270,20 @@ while(True):
         display_kp = current_kp
         display_ki = current_ki
         display_kd = current_kd
-    
+        display_deadzone = current_deadzone
+
     cv2.putText(overlay, f"Kp: {display_kp:.4f}", (10, 60),
                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
     cv2.putText(overlay, f"Ki: {display_ki:.4f}", (10, 90),
                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
     cv2.putText(overlay, f"Kd: {display_kd:.4f}", (10, 120),
                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-    
+    cv2.putText(overlay, f"Deadzone: {display_deadzone:.1f} px", (10, 150),
+               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+
+    # Draw deadzone circle overlay
+    cv2.circle(overlay, center_point_px, int(display_deadzone), (255, 0, 255), 2)
+
     # Display the frame with overlays
     cv2.imshow("Ball Tracking - Real-time Detection", overlay)
     
@@ -279,9 +310,13 @@ while(True):
     print("center point px:", center_point_px[0], center_point_px[1])
     print(f"Ball Position: {ball_position}, Center: {center}")
 
+    # Get current deadzone value
+    with pid_gains_lock:
+        deadzone_value = current_deadzone
+
     #Obtain and project the error onto each axis. All inputs are 2D numpy arrays
-    error_array = projected_errors(u1, u2, u3, ball_position, center) #output array is: [axis 1, axis 2, axis 3]
-    
+    error_array = projected_errors(u1, u2, u3, ball_position, center, deadzone_value) #output array is: [axis 1, axis 2, axis 3]
+
     #run each PID controller
     motor1_command = motor1_pid.update(error_array[0])
     motor2_command = motor2_pid.update(error_array[1])

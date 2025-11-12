@@ -1,6 +1,6 @@
 import numpy as np
 
-def projected_errors (u1, u2, u3, ball_position, s):
+def projected_errors (u1, u2, u3, ball_position, s, deadzone_radius):
     """Arguments: 
     u1, u2, u3 are the unit vectors (magnitude of 1)
     for each motor's axis on the stewart platform. They are an (x,y) list
@@ -16,6 +16,9 @@ def projected_errors (u1, u2, u3, ball_position, s):
         return [0,0,0]
     
     xy_error = ball_position - s #Element wise numpy subtraction
+
+    if np.linalg.norm(xy_error) < deadzone_radius:
+        xy_error = np.array([0,0])
 
     #Obtain 1D errors by projecting onto the motors axis
     #returns an array of errors projected to each axis u1, u2, u3 respectively
@@ -55,6 +58,7 @@ class PIDcontroller:
 
     def update(self, error, dt=0.033): #default dt is ~30fps the inverse of that is the seconds
         # Proportional term
+
         P = self.Kp * error
         self.integral += error * dt
         I = self.Ki * self.integral
