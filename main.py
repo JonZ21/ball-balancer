@@ -52,9 +52,9 @@ Kd = 0.0
 Ki = 0.0
 
 # PID tuning ranges for sliders
-Kp_max = 2.0
-Ki_max = 0.01
-Kd_max = 1.0
+Kp_max = 10.0
+Ki_max = 10.0
+Kd_max = 10.0
 slider_resolution = 1000  # Higher resolution for finer tuning
 
 #Using placeholder motor angles for now, validate for each motor.
@@ -82,7 +82,7 @@ class PIDTuningGUI:
         self.root.title("PID Tuning")
         # Larger window for better visibility
         self.root.geometry("550x700+850+100")  # Position window beside video feed (x=850, y=100)
-        self.root.resizable(False, False)
+        self.root.resizable(True, True)
 
         # Main frame
         main_frame = ttk.Frame(root, padding="20")
