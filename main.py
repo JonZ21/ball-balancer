@@ -52,14 +52,14 @@ Kd = 0.0
 Ki = 0.0
 
 # PID tuning ranges for sliders
-Kp_max = 10.0
-Ki_max = 10.0
-Kd_max = 10.0
+Kp_max = 1
+Ki_max = 0.8
+Kd_max = 1
 slider_resolution = 1000  # Higher resolution for finer tuning
 
 # Deadzone settings
 deadzone_radius = 10.0  # pixels
-deadzone_max = 50.0  # maximum deadzone radius
+deadzone_max = 20.0  # maximum deadzone radius
 
 #Using placeholder motor angles for now, validate for each motor.
 min_motor_angle = 0
