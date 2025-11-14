@@ -2,6 +2,8 @@
 from controller import projected_errors, PIDcontroller
 from serial_interface import SerialPort
 from ball_tracking import BallDetector
+from tuning_j import start_trial, log_sample, finish_and_score
+from nm_tuner import start_nm_tuning
 import cv2
 import json
 import numpy as np
@@ -65,9 +67,12 @@ deadzone_max = 20.0  # maximum deadzone radius
 min_motor_angle = 0
 max_motor_angle = 20
 
-motor1_pid = PIDcontroller(Kp, Kd, Ki, min_motor_angle, max_motor_angle)
-motor2_pid = PIDcontroller(Kp, Kd, Ki, min_motor_angle +6, max_motor_angle +6)
-motor3_pid = PIDcontroller(Kp, Kd, Ki, min_motor_angle, max_motor_angle)
+motor1_pid = PIDcontroller(Kp, Ki, Kd, min_motor_angle, max_motor_angle)
+motor2_pid = PIDcontroller(Kp, Ki, Kd, min_motor_angle +6, max_motor_angle +6)
+motor3_pid = PIDcontroller(Kp, Ki, Kd, min_motor_angle, max_motor_angle)
+
+# Last valid camera error (used if detection drops out briefly)
+last_xy_error = np.array([0.0, 0.0], dtype=float)
 
 # Global variables for GUI
 pid_gains_lock = threading.Lock()
@@ -285,12 +290,51 @@ while(True):
     cv2.circle(overlay, center_point_px, int(display_deadzone), (255, 0, 255), 2)
 
     # Display the frame with overlays
+    # Display the frame with overlays
     cv2.imshow("Ball Tracking - Real-time Detection", overlay)
-    
-    # Exit on 'q' key press
-    if cv2.waitKey(1) & 0xFF == ord('q'):
+
+    # ---- Single keyboard handler for the whole app (runs each frame) ----
+    # OpenCV processes GUI + keyboard events only inside waitKey/pollKey.
+    key = cv2.waitKey(1) & 0xFF
+
+    # Quit the program
+    if key == ord('q'):
         print("[INFO] Ball tracking stopped.")
         break
+    
+    elif key == ord('o'):
+    # use current GUI slider values as initial guess (nice UX)
+        with pid_gains_lock:
+            x0 = (current_kp, current_ki, current_kd)
+        start_nm_tuning(
+            motor_pids=(motor1_pid, motor2_pid, motor3_pid),
+            trial_sec=10.0,
+            w1=1.0, w2=0.7, pctl=95,
+            x0=x0,
+            step=(0.05, 0.03, 0.05),
+            max_iter=20
+        )
+        print("[NM] tuner started — it will run ~10 s trials until it finds better J.")
+
+    # Start a ~10 s scoring trial:
+    # - Reset integrators so trials are comparable (no old integral windup)
+    # - Start the scorer's buffers
+    elif key == ord('s'):
+        motor1_pid.reset_integral()
+        motor2_pid.reset_integral()
+        motor3_pid.reset_integral()
+        start_trial()
+        print("[TUNE] Trial started (~10 s). Press 'e' to end & score.")
+
+    # End trial and compute J = w1*IAE + w2*P95 on raw r[k] (no filtering).
+    # Prints both the overall score and a breakdown useful for debugging.
+    elif key == ord('e'):
+        J, parts = finish_and_score(w1=1.0, w2=0.7, pctl=95)
+        if J is None:
+            print("[TUNE] Not enough samples to score.")
+        else:
+            print(f"[TUNE] J={J:.3f}  IAE={parts['IAE']:.2f}  "
+                f"P95={parts['P95']:.2f}  N={parts['N']}  dt≈{parts['dt']:.3f}s")
 
 
     #Calculate the ball position
@@ -307,6 +351,15 @@ while(True):
     # Center point (resized and cast to int earlier)
     center = np.array(center_point_px)
     
+    # ---- Build raw 2-D camera error and log it for scoring ----
+    if ball_position is not None:
+        xy_error = ball_position - center          # shape (2,)
+        last_xy_error = xy_error
+    else:
+        xy_error = last_xy_error                   # keep logging during short dropouts
+
+    log_sample(xy_error)                           # no-op unless a trial is active
+
     print("center point px:", center_point_px[0], center_point_px[1])
     print(f"Ball Position: {ball_position}, Center: {center}")
 
