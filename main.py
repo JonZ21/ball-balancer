@@ -49,14 +49,19 @@ serial_port.connect_serial()
 serial_port.send_servo_angles(10, 10, 10)
 
 #initialize PID controllers
+# [NM] BEST  Kp=0.1899  Ki=0.0000  Kd=0.1075   ->   J=69.283
+
+Kp = 0.195
+Ki = 0 
+Kd = 0.0872
 # Kp = 0.1706
 # Kd = 0.1496
 # Ki = 0.0697
 
 
-Kp=0.0801  
-Ki=0.1094  
-Kd=0.1787  
+# Kp=0.0801  
+# Ki=0.1094  
+# Kd=0.1787  
 # ->   J=19.244
 
 # PID tuning ranges for sliders
@@ -344,11 +349,11 @@ while(True):
         
         start_nm_tuning(
             motor_pids=(motor1_pid, motor2_pid, motor3_pid),
-            trial_sec=5.0,
+            trial_sec=10.0,
             w1=1.0, w2=0.7, pctl=95,
             x0=x0,
-            scale=0.4,
-            max_iter=20,
+            scale=0.5,
+            max_iter=10,
             gains_lock=pid_gains_lock,
             update_globals_fn=update_globals,
             sync_gui_fn=sync_gui

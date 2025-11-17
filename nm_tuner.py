@@ -139,9 +139,21 @@ def run_trial(pid_list, trial_duration_s, w1, w2, pctl, gains):
     
     print(f"[NM] Starting trial with Kp={kp:.4f}, Ki={ki:.4f}, Kd={kd:.4f}...")
     
+    # Give the operator a short countdown so they can prepare the rig.
+    # Default countdown seconds can be adjusted here.
+    COUNTDOWN_SECONDS = 5
+    try:
+        for remaining in range(COUNTDOWN_SECONDS, 0, -1):
+            print(f"[NM] Trial starts in {remaining} second(s)...", end='\r', flush=True)
+            time.sleep(1)
+        print()  # move to next line after countdown
+    except KeyboardInterrupt:
+        # If the operator hits Ctrl-C, proceed immediately
+        print("\n[NM] Countdown interrupted; starting trial immediately.")
+
     # Step 3: Signal scoring module to begin data collection
     start_trial()
-    
+
     # Step 4: Wait for trial to complete
     # NOTE: This sleep doesn't block the main OpenCV loop (different thread)
     #       Main loop continues calling log_sample() during this time

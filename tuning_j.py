@@ -105,7 +105,7 @@ def log_sample(xy_error):
     radial_error = float(np.linalg.norm(xy_error))
     E.append(radial_error)
 
-def finish_and_score(w1=1.0, w2=0.7, pctl=95):
+def finish_and_score(w1=1.4, w2=0.3, pctl=95):
     """Complete the trial and compute the performance score.
     
     This function:
