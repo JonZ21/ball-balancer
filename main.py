@@ -51,6 +51,11 @@ Kp = 0.1950
 Kd = 0.0872
 Ki = 0.0200
 
+# from autotune after 40 
+# Kp=0.0801  
+# Ki=0.1094  
+# Kd=0.1787  
+
 # PID tuning ranges for sliders
 Kp_max = 1
 Ki_max = 1
