@@ -1,6 +1,6 @@
 import numpy as np
 
-def projected_errors (u1, u2, u3, ball_position, s, deadzone_radius):
+def projected_errors (u1, u2, u3, ball_position, s, deadzone_radius, deadzone_count):
     """Arguments: 
     u1, u2, u3 are the unit vectors (magnitude of 1)
     for each motor's axis on the stewart platform. They are an (x,y) list
@@ -18,6 +18,12 @@ def projected_errors (u1, u2, u3, ball_position, s, deadzone_radius):
     xy_error = ball_position - s #Element wise numpy subtraction
 
     if np.linalg.norm(xy_error) < deadzone_radius:
+        deadzone_count += 1
+    else:
+        deadzone_count = 0
+
+    if deadzone_count < 30:
+        print("deadzone exceeded. Setting 0")
         xy_error = np.array([0,0])
 
     #Obtain 1D errors by projecting onto the motors axis
