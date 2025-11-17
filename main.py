@@ -9,6 +9,7 @@ import tkinter as tk
 from tkinter import ttk
 import threading
 import time
+import queue
 
 with open("config.json", "r") as f:
     config = json.load(f) #Open the camera config file. 
@@ -75,6 +76,18 @@ current_kp = Kp
 current_ki = Ki
 current_kd = Kd
 current_deadzone = deadzone_radius
+
+#Shared data for multithreading
+frame_queue = queue.Queue(maxsize=1)
+vision_data_lock = threading.Lock()
+vision_data = {
+    "overlay": None,
+    "ball_position": None,
+    "found": False,
+}
+stop_event = threading.Event()
+center = np.array(center_point_px)
+control_interval = 0.01  # 100 Hz control loop
 
 # PID Tuning GUI Class
 class PIDTuningGUI:
@@ -240,6 +253,144 @@ def run_gui():
     except KeyboardInterrupt:
         pass
 
+# Multithreaded workers
+def capture_frames():
+    """Continuously capture frames from the camera."""
+    while not stop_event.is_set():
+        ret, frame = cap.read()
+        if not ret:
+            continue
+
+        frame = cv2.resize(frame, (320, 240))
+
+        try:
+            frame_queue.put(frame, timeout=0.01)
+        except queue.Full:
+            try:
+                frame_queue.get_nowait()
+            except queue.Empty:
+                pass
+            try:
+                frame_queue.put(frame, timeout=0.01)
+            except queue.Full:
+                pass
+
+
+def vision_processing():
+    """Process frames to detect the ball and prepare overlays."""
+    while not stop_event.is_set():
+        try:
+            frame = frame_queue.get(timeout=0.05)
+        except queue.Empty:
+            continue
+
+        overlay, found_overlay = detect.draw_detection(
+            frame, center_point_px, platform_points, u_vectors, show_info=True
+        )
+
+        if found_overlay:
+            cv2.putText(
+                overlay,
+                "Ball Detected: YES",
+                (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (0, 255, 0),
+                2,
+            )
+        else:
+            cv2.putText(
+                overlay,
+                "Ball Detected: NO",
+                (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (0, 0, 255),
+                2,
+            )
+
+        with pid_gains_lock:
+            display_kp = current_kp
+            display_ki = current_ki
+            display_kd = current_kd
+            display_deadzone = current_deadzone
+
+        cv2.putText(
+            overlay,
+            f"Kp: {display_kp:.4f}",
+            (10, 60),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (255, 255, 255),
+            2,
+        )
+        cv2.putText(
+            overlay,
+            f"Ki: {display_ki:.4f}",
+            (10, 90),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (255, 255, 255),
+            2,
+        )
+        cv2.putText(
+            overlay,
+            f"Kd: {display_kd:.4f}",
+            (10, 120),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (255, 255, 255),
+            2,
+        )
+        cv2.putText(
+            overlay,
+            f"Deadzone: {display_deadzone:.1f} px",
+            (10, 150),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (255, 255, 255),
+            2,
+        )
+        cv2.circle(overlay, center_point_px, int(display_deadzone), (255, 0, 255), 2)
+
+        found_ball, x, y, radius = detect.detect_ball(frame)
+        if found_ball and x is not None and y is not None:
+            ball_position = np.array([x, y])
+        else:
+            ball_position = None
+
+        with vision_data_lock:
+            vision_data["overlay"] = overlay
+            vision_data["ball_position"] = ball_position
+            vision_data["found"] = found_ball
+
+
+def control_loop():
+    """Compute PID commands and send them to the servos."""
+    last_time = time.time()
+    while not stop_event.is_set():
+        with vision_data_lock:
+            ball_position = vision_data["ball_position"]
+
+        with pid_gains_lock:
+            deadzone_value = current_deadzone
+
+        error_array = projected_errors(u1, u2, u3, ball_position, center, deadzone_value)
+
+        now = time.time()
+        dt = max(now - last_time, 1e-3)
+        last_time = now
+
+        motor1_command = motor1_pid.update(error_array[0], dt=dt)
+        motor2_command = motor2_pid.update(error_array[1], dt=dt)
+        motor3_command = motor3_pid.update(error_array[2], dt=dt)
+
+        print("center point px:", center_point_px[0], center_point_px[1])
+        print(f"Ball Position: {ball_position}, Center: {center}")
+
+        serial_port.send_servo_angles(motor1_command, motor2_command, motor3_command)
+        time.sleep(control_interval)
+
 # Start GUI in a separate thread
 gui_thread = threading.Thread(target=run_gui, daemon=True)
 gui_thread.start()
@@ -247,85 +398,31 @@ gui_thread.start()
 # Small delay to allow GUI to initialize
 time.sleep(0.5)
 
-while(True):
-    ret, frame = cap.read()
-    frame = cv2.resize(frame, (320, 240))
+# Start worker threads
+capture_thread = threading.Thread(target=capture_frames, daemon=True)
+vision_thread = threading.Thread(target=vision_processing, daemon=True)
+control_thread = threading.Thread(target=control_loop, daemon=True)
 
-    if not ret:
-        continue
-    
-    # Draw detection overlay with ball circle and center point
-    overlay, found= detect.draw_detection(frame, center_point_px, platform_points, u_vectors, show_info=True)
-    
-    # Add additional information panel
-    if found:
-        cv2.putText(overlay, f"Ball Detected: YES", (10, 30),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-    else:
-        cv2.putText(overlay, f"Ball Detected: NO", (10, 30),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-    
-    # Display current PID values on overlay
-    with pid_gains_lock:
-        display_kp = current_kp
-        display_ki = current_ki
-        display_kd = current_kd
-        display_deadzone = current_deadzone
+capture_thread.start()
+vision_thread.start()
+control_thread.start()
 
-    cv2.putText(overlay, f"Kp: {display_kp:.4f}", (10, 60),
-               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-    cv2.putText(overlay, f"Ki: {display_ki:.4f}", (10, 90),
-               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-    cv2.putText(overlay, f"Kd: {display_kd:.4f}", (10, 120),
-               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-    cv2.putText(overlay, f"Deadzone: {display_deadzone:.1f} px", (10, 150),
-               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+try:
+    while not stop_event.is_set():
+        with vision_data_lock:
+            overlay = vision_data["overlay"]
 
-    # Draw deadzone circle overlay
-    cv2.circle(overlay, center_point_px, int(display_deadzone), (255, 0, 255), 2)
+        if overlay is not None:
+            cv2.imshow("Ball Tracking - Real-time Detection", overlay)
 
-    # Display the frame with overlays
-    cv2.imshow("Ball Tracking - Real-time Detection", overlay)
-    
-    # Exit on 'q' key press
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        print("[INFO] Ball tracking stopped.")
-        break
-
-
-    #Calculate the ball position
-    found, x, y, radius =  detect.detect_ball(frame)#Placeholder, Kean's function should output a 2D numpy array
-
-    # Convert to numpy arrays - only if ball is detected
-    if found and x is not None and y is not None:
-        # detect_ball is called on the resized (320x240) frame, so x,y are already in the
-        # resized coordinate system — do NOT divide by 2 here.
-        ball_position = np.array([x, y])
-    else:
-        ball_position = None
-
-    # Center point (resized and cast to int earlier)
-    center = np.array(center_point_px)
-    
-    print("center point px:", center_point_px[0], center_point_px[1])
-    print(f"Ball Position: {ball_position}, Center: {center}")
-
-    # Get current deadzone value
-    with pid_gains_lock:
-        deadzone_value = current_deadzone
-
-    #Obtain and project the error onto each axis. All inputs are 2D numpy arrays
-    error_array = projected_errors(u1, u2, u3, ball_position, center, deadzone_value) #output array is: [axis 1, axis 2, axis 3]
-
-    #run each PID controller
-    motor1_command = motor1_pid.update(error_array[0])
-    motor2_command = motor2_pid.update(error_array[1])
-    motor3_command = motor3_pid.update(error_array[2])
-
-    #Send code to each motor by converting the commands to a 3 byte array and sending over serial
-    serial_port.send_servo_angles(motor1_command, motor2_command, motor3_command)
-
-    # delay(10)
-    
-cap.release()
-cv2.destroyAllWindows()
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            print("[INFO] Ball tracking stopped.")
+            stop_event.set()
+            break
+finally:
+    stop_event.set()
+    capture_thread.join(timeout=1)
+    vision_thread.join(timeout=1)
+    control_thread.join(timeout=1)
+    cap.release()
+    cv2.destroyAllWindows()
