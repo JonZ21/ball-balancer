@@ -22,7 +22,7 @@ def projected_errors (u1, u2, u3, ball_position, s, deadzone_radius, deadzone_co
         deadzone_count = 0
     print("xy_error:", xy_error, "deadzone_count:", deadzone_count)
 
-    if deadzone_count > 30:
+    if deadzone_count > 100:
         print("deadzone exceeded. Setting 0")
         xy_error = np.array([0,0])
 
@@ -41,7 +41,7 @@ class PIDcontroller:
         self.integral = 0
         self.min_output_angle = min_motor_angle  # degrees (0 = up)
         self.max_output_angle = max_motor_angle   # degrees (20 = down)
-        self.neutral_angle = 10  # Neutral/resting position
+        self.neutral_angle = (min_motor_angle + max_motor_angle) / 2  # Neutral/resting position
 
     def update_gains(self, Kp=None, Ki=None, Kd=None):
         """Update PID gains in real-time.
