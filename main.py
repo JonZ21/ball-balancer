@@ -9,6 +9,7 @@ import tkinter as tk
 from tkinter import ttk
 import threading
 import time
+import queue
 
 with open("config.json", "r") as f:
     config = json.load(f) #Open the camera config file. 
@@ -354,110 +355,249 @@ class TrackingPlotGUI:
         print(f"[TRACK] Saved: {filename}")
         self.clear_plots()
 
+# Thread-safe data structures for inter-thread communication
+frame_queue = queue.Queue(maxsize=2)  # Small buffer to prevent lag
+vision_data_lock = threading.Lock()
+vision_data = {
+    "overlay": None,
+    "ball_position": None,
+    "found": False,
+    "ready": False
+}
+ball_data_queue = queue.Queue()  # Queue for ball position data to plotting thread
+stop_event = threading.Event()
+
+# Global deadzone count (thread-safe access needed)
+deadzone_count_lock = threading.Lock()
+deadzone_count = 0
+
+center = np.array(center_point_px)
+
+# Reference to plot GUI instance (will be set by plot thread)
+plot_gui_instance = None
+plot_gui_lock = threading.Lock()
+
+def camera_capture_thread():
+    """Thread 1: Continuously captures frames from camera."""
+    global cap
+    print("[THREAD] Camera capture thread started")
+    while not stop_event.is_set():
+        ret, frame = cap.read()
+        if not ret:
+            time.sleep(0.01)
+            continue
+        
+        frame = cv2.resize(frame, (320, 240))
+        
+        # Put frame in queue (non-blocking, drop old frames if queue full)
+        try:
+            frame_queue.put_nowait(frame)
+        except queue.Full:
+            # Drop oldest frame and add new one
+            try:
+                frame_queue.get_nowait()
+                frame_queue.put_nowait(frame)
+            except queue.Empty:
+                pass
+
+def vision_processing_thread():
+    """Thread 2: Processes frames for ball detection and creates overlay."""
+    global vision_data, plot_gui_instance
+    print("[THREAD] Vision processing thread started")
+    
+    while not stop_event.is_set():
+        try:
+            # Get frame from queue with timeout
+            frame = frame_queue.get(timeout=0.1)
+        except queue.Empty:
+            continue
+        
+        # Detect ball position
+        found, x, y, radius = detect.detect_ball(frame)
+        
+        # Draw detection overlay
+        overlay, found_overlay = detect.draw_detection(frame, center_point_px, platform_points, u_vectors, show_info=True)
+        
+        # Add additional information panel
+        if found_overlay:
+            cv2.putText(overlay, f"Ball Detected: YES", (10, 30),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+        else:
+            cv2.putText(overlay, f"Ball Detected: NO", (10, 30),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+        
+        # Display current PID values on overlay
+        with pid_gains_lock:
+            display_kp = current_kp
+            display_ki = current_ki
+            display_kd = current_kd
+            display_deadzone = current_deadzone
+
+        cv2.putText(overlay, f"Kp: {display_kp:.4f}", (10, 60),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        cv2.putText(overlay, f"Ki: {display_ki:.4f}", (10, 90),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        cv2.putText(overlay, f"Kd: {display_kd:.4f}", (10, 120),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        cv2.putText(overlay, f"Deadzone: {display_deadzone:.1f} px", (10, 150),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+
+        # Draw deadzone circle overlay
+        cv2.circle(overlay, center_point_px, int(display_deadzone), (255, 0, 255), 2)
+
+        # Convert to numpy array if ball detected
+        if found and x is not None and y is not None:
+            ball_position = np.array([x, y])
+            # Send data to plotting thread
+            try:
+                px = float(x - center[0])
+                py = float(y - center[1])
+                ball_data_queue.put_nowait((px, py))
+            except queue.Full:
+                pass  # Drop data if queue full
+        else:
+            ball_position = None
+
+        # Update shared vision data
+        with vision_data_lock:
+            vision_data["overlay"] = overlay
+            vision_data["ball_position"] = ball_position
+            vision_data["found"] = found
+            vision_data["ready"] = True
+
+def pid_control_thread():
+    """Thread 3: PID control loop - calculates errors and sends servo commands."""
+    global deadzone_count
+    print("[THREAD] PID control thread started")
+    
+    last_time = time.time()
+    control_interval = 0.01  # 100 Hz control loop
+    
+    while not stop_event.is_set():
+        loop_start = time.time()
+        
+        # Get current ball position from vision thread
+        with vision_data_lock:
+            ball_position = vision_data["ball_position"]
+            if not vision_data["ready"]:
+                time.sleep(control_interval)
+                continue
+        
+        # Get current deadzone value
+        with pid_gains_lock:
+            deadzone_value = current_deadzone
+        
+        # Calculate errors
+        with deadzone_count_lock:
+            error_array, deadzone_count = projected_errors(
+                u1, u2, u3, ball_position, center, deadzone_value, deadzone_count
+            )
+        
+        # Calculate dt for PID
+        current_time = time.time()
+        dt = current_time - last_time
+        if dt <= 0:
+            dt = control_interval
+        last_time = current_time
+        
+        # Run PID controllers
+        motor1_command = motor1_pid.update(error_array[0], dt)
+        motor2_command = motor2_pid.update(error_array[1], dt)
+        motor3_command = motor3_pid.update(error_array[2], dt)
+        
+        # Send servo commands
+        serial_port.send_servo_angles(motor1_command, motor2_command, motor3_command)
+        
+        # Maintain control loop timing
+        elapsed = time.time() - loop_start
+        sleep_time = max(0, control_interval - elapsed)
+        if sleep_time > 0:
+            time.sleep(sleep_time)
+
+def data_plotting_thread():
+    """Thread 4: Handles data plotting - receives ball position and updates plots."""
+    global plot_gui_instance
+    print("[THREAD] Data plotting thread started")
+    
+    while not stop_event.is_set():
+        try:
+            # Get ball position data from queue
+            x, y = ball_data_queue.get(timeout=0.1)
+            
+            # Send to plot GUI if available
+            with plot_gui_lock:
+                if plot_gui_instance is not None:
+                    plot_gui_instance.add_data(x, y)
+        except queue.Empty:
+            continue
+
 def run_plot_gui():
+    """Run the plotting GUI in a separate thread."""
+    global plot_gui_instance
     root = tk.Tk()
-    global plot_gui
-    plot_gui = TrackingPlotGUI(root)
+    plot_gui_instance = TrackingPlotGUI(root)
+    
+    with plot_gui_lock:
+        pass  # Instance is now set
+    
     try:
         root.mainloop()
     except KeyboardInterrupt:
         pass
 
-plot_gui = threading.Thread(target = run_plot_gui, daemon = True)
-plot_gui.start()
+# Start all threads
+print("[INFO] Starting multithreaded ball balancer...")
 
-# Start GUI in a separate thread
+# Start GUI threads
+plot_gui_thread = threading.Thread(target=run_plot_gui, daemon=True)
+plot_gui_thread.start()
+
 gui_thread = threading.Thread(target=run_gui, daemon=True)
 gui_thread.start()
 
-# Small delay to allow GUI to initialize
+# Small delay to allow GUIs to initialize
 time.sleep(0.5)
 
-deadzone_count = 0 
+# Start worker threads
+camera_thread = threading.Thread(target=camera_capture_thread, daemon=True)
+vision_thread = threading.Thread(target=vision_processing_thread, daemon=True)
+pid_thread = threading.Thread(target=pid_control_thread, daemon=True)
+plotting_thread = threading.Thread(target=data_plotting_thread, daemon=True)
 
-while(True):
-    ret, frame = cap.read()
-    frame = cv2.resize(frame, (320, 240))
+camera_thread.start()
+vision_thread.start()
+pid_thread.start()
+plotting_thread.start()
 
-    if not ret:
-        continue
+print("[INFO] All threads started. Press 'q' to quit.")
+
+# Main display loop (runs on main thread)
+while not stop_event.is_set():
+    # Get overlay from vision thread
+    overlay = None
+    with vision_data_lock:
+        if vision_data["ready"]:
+            overlay = vision_data["overlay"]
     
-    # Draw detection overlay with ball circle and center point
-    overlay, found= detect.draw_detection(frame, center_point_px, platform_points, u_vectors, show_info=True)
+    if overlay is not None:
+        cv2.imshow("Ball Tracking - Real-time Detection", overlay)
     
-    # Add additional information panel
-    if found:
-        cv2.putText(overlay, f"Ball Detected: YES", (10, 30),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-    else:
-        cv2.putText(overlay, f"Ball Detected: NO", (10, 30),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-    
-    # Display current PID values on overlay
-    with pid_gains_lock:
-        display_kp = current_kp
-        display_ki = current_ki
-        display_kd = current_kd
-        display_deadzone = current_deadzone
-
-    cv2.putText(overlay, f"Kp: {display_kp:.4f}", (10, 60),
-               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-    cv2.putText(overlay, f"Ki: {display_ki:.4f}", (10, 90),
-               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-    cv2.putText(overlay, f"Kd: {display_kd:.4f}", (10, 120),
-               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-    cv2.putText(overlay, f"Deadzone: {display_deadzone:.1f} px", (10, 150),
-               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-
-    # Draw deadzone circle overlay
-    cv2.circle(overlay, center_point_px, int(display_deadzone), (255, 0, 255), 2)
-
-    # Display the frame with overlays
-    cv2.imshow("Ball Tracking - Real-time Detection", overlay)
-    
-    # Exit on 'q' key press
+    # Check for quit key
     if cv2.waitKey(1) & 0xFF == ord('q'):
         print("[INFO] Ball tracking stopped.")
+        stop_event.set()
         break
 
+# Cleanup
+print("[INFO] Shutting down threads...")
+stop_event.set()
 
-    #Calculate the ball position
-    found, x, y, radius =  detect.detect_ball(frame)#Placeholder, Kean's function should output a 2D numpy array
+# Wait for threads to finish (with timeout)
+camera_thread.join(timeout=1.0)
+vision_thread.join(timeout=1.0)
+pid_thread.join(timeout=1.0)
+plotting_thread.join(timeout=1.0)
 
-    center = np.array(center_point_px)
-    # Convert to numpy arrays - only if ball is detected
-    if found and x is not None and y is not None:
-        # detect_ball is called on the resized (320x240) frame, so x,y are already in the
-        # resized coordinate system — do NOT divide by 2 here.
-        ball_position = np.array([x, y])
-        # Center point (resized and cast to int earlier)
-        if plot_gui is not None:
-            px = float(x - center[0])
-            py = float(y - center[1])
-            plot_gui.add_data(px, py)
-    else:
-        ball_position = None
-
-    print("center point px:", center_point_px[0], center_point_px[1])
-    print(f"Ball Position: {ball_position}, Center: {center}")
-
-    # Get current deadzone value
-    with pid_gains_lock:
-        deadzone_value = current_deadzone
-
-    #Obtain and project the error onto each axis. All inputs are 2D numpy arrays
-    error_array, deadzone_count = projected_errors(u1, u2, u3, ball_position, center, deadzone_value, deadzone_count) #output array is: [axis 1, axis 2, axis 3]
-
-    #run each PID controller
-    motor1_command = motor1_pid.update(error_array[0])
-    motor2_command = motor2_pid.update(error_array[1])
-    motor3_command = motor3_pid.update(error_array[2])
-
-    #Send code to each motor by converting the commands to a 3 byte array and sending over serial
-    serial_port.send_servo_angles(motor1_command, motor2_command, motor3_command)
-
-    # delay(10)
-
-    
 cap.release()
 cv2.destroyAllWindows()
+print("[INFO] Cleanup complete.")
