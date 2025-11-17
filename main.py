@@ -446,14 +446,13 @@ while(True):
         deadzone_value = current_deadzone
 
     #Obtain and project the error onto each axis. All inputs are 2D numpy arrays
-    error_array = projected_errors(u1, u2, u3, ball_position, center, deadzone_value, deadzone_count) #output array is: [axis 1, axis 2, axis 3]
+    error_array, deadzone_count = projected_errors(u1, u2, u3, ball_position, center, deadzone_value, deadzone_count) #output array is: [axis 1, axis 2, axis 3]
 
     #run each PID controller
     motor1_command = motor1_pid.update(error_array[0])
     motor2_command = motor2_pid.update(error_array[1])
     motor3_command = motor3_pid.update(error_array[2])
 
-    print("count", deadzone_count)
     #Send code to each motor by converting the commands to a 3 byte array and sending over serial
     serial_port.send_servo_angles(motor1_command, motor2_command, motor3_command)
 

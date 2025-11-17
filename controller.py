@@ -13,14 +13,14 @@ def projected_errors (u1, u2, u3, ball_position, s, deadzone_radius, deadzone_co
     """
     #The 2D error vector:
     if ball_position is None or s is None:
-        return [0,0,0]
+        return [0,0,0], deadzone_count
     
     xy_error = ball_position - s #Element wise numpy subtraction
-
     if np.linalg.norm(xy_error) < deadzone_radius:
-        deadzone_count += 1
+        deadzone_count = deadzone_count + 1
     else:
         deadzone_count = 0
+    print("xy_error:", xy_error, "deadzone_count:", deadzone_count)
 
     if deadzone_count > 30:
         print("deadzone exceeded. Setting 0")
@@ -30,7 +30,7 @@ def projected_errors (u1, u2, u3, ball_position, s, deadzone_radius, deadzone_co
     #returns an array of errors projected to each axis u1, u2, u3 respectively
     errors= [np.dot(u1, xy_error), np.dot(u2, xy_error), np.dot(u3, xy_error)] 
 
-    return errors
+    return errors, deadzone_count
 
 class PIDcontroller:
     def __init__(self, Kp, Ki, Kd, min_motor_angle, max_motor_angle):
