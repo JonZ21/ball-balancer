@@ -49,9 +49,15 @@ serial_port.connect_serial()
 serial_port.send_servo_angles(10, 10, 10)
 
 #initialize PID controllers
-Kp = 0.1606
-Kd = 0.1376
-Ki = 0.0688
+# Kp = 0.1706
+# Kd = 0.1496
+# Ki = 0.0697
+
+
+Kp=0.0801  
+Ki=0.1094  
+Kd=0.1787  
+# ->   J=19.244
 
 # PID tuning ranges for sliders
 Kp_max = 1
@@ -324,11 +330,13 @@ while(True):
         
         # Callback to update global variables
         def update_globals(kp, ki, kd):
-            global current_kp, current_ki, current_kd
-            current_kp = kp
-            current_ki = ki
-            current_kd = kd
-        
+            # Update all PID controllers
+            print("Setting gains to: ")
+            print("Kp:", kp, "Ki:", ki, "Kd:", kd)
+            PIDTuningGUI.motor1_pid.update_gains(Kp=kp, Ki=ki, Kd=kd)
+            PIDTuningGUI.motor2_pid.update_gains(Kp=kp, Ki=ki, Kd=kd)
+            PIDTuningGUI.motor3_pid.update_gains(Kp=kp, Ki=ki, Kd=kd)
+
         # Callback to sync GUI sliders
         def sync_gui():
             if gui_app is not None:
@@ -336,10 +344,10 @@ while(True):
         
         start_nm_tuning(
             motor_pids=(motor1_pid, motor2_pid, motor3_pid),
-            trial_sec=10.0,
+            trial_sec=5.0,
             w1=1.0, w2=0.7, pctl=95,
             x0=x0,
-            scale=0.3,
+            scale=0.4,
             max_iter=20,
             gains_lock=pid_gains_lock,
             update_globals_fn=update_globals,
@@ -391,8 +399,8 @@ while(True):
 
     log_sample(xy_error)                           # no-op unless a trial is active
 
-    print("center point px:", center_point_px[0], center_point_px[1])
-    print(f"Ball Position: {ball_position}, Center: {center}")
+    # print("center point px:", center_point_px[0], center_point_px[1])
+    # print(f"Ball Position: {ball_position}, Center: {center}")
 
     # Get current deadzone value
     with pid_gains_lock:

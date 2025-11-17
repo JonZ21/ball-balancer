@@ -34,7 +34,7 @@ class SerialPort:
         #Args:
             #angle1, angle2, angle3 (float): Desired servo angles in degrees (0-30)
 
-        print(" [SERVO] Sending angles:", angle1, angle2, angle3)
+        # print(" [SERVO] Sending angles:", angle1, angle2, angle3)
 
         if self.serial and self.serial.is_open: #Only run if the serial port has been connected
             # Clip angles to safe range and convert to integers
