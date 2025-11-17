@@ -236,10 +236,23 @@ class PIDTuningGUI:
         # Schedule next update
         self.root.after(100, self.update_current_values)
 
+    def sync_sliders_from_globals(self):
+        """Sync GUI sliders with global gain values (called by NM tuner)."""
+        global current_kp, current_ki, current_kd
+        with pid_gains_lock:
+            self.kp_scale.set(current_kp)
+            self.ki_scale.set(current_ki)
+            self.kd_scale.set(current_kd)
+        print("[GUI] Sliders synced with optimized gains")
+
+# Global reference to GUI app for NM tuner to update sliders
+gui_app = None
+
 def run_gui():
     """Run the PID tuning GUI in a separate thread."""
+    global gui_app
     root = tk.Tk()
-    app = PIDTuningGUI(root, motor1_pid, motor2_pid, motor3_pid)
+    gui_app = PIDTuningGUI(root, motor1_pid, motor2_pid, motor3_pid)
     try:
         root.mainloop()
     except KeyboardInterrupt:
@@ -306,15 +319,33 @@ while(True):
     # use current GUI slider values as initial guess (nice UX)
         with pid_gains_lock:
             x0 = (current_kp, current_ki, current_kd)
+        print("[NM] Starting Nelder-Mead auto-tuner...")
+        print("[NM] This will run multiple 10s trials. Watch the console for progress.")
+        
+        # Callback to update global variables
+        def update_globals(kp, ki, kd):
+            global current_kp, current_ki, current_kd
+            current_kp = kp
+            current_ki = ki
+            current_kd = kd
+        
+        # Callback to sync GUI sliders
+        def sync_gui():
+            if gui_app is not None:
+                gui_app.root.after(0, gui_app.sync_sliders_from_globals)
+        
         start_nm_tuning(
             motor_pids=(motor1_pid, motor2_pid, motor3_pid),
             trial_sec=10.0,
             w1=1.0, w2=0.7, pctl=95,
             x0=x0,
-            step=(0.05, 0.03, 0.05),
-            max_iter=20
+            scale=0.3,
+            max_iter=20,
+            gains_lock=pid_gains_lock,
+            update_globals_fn=update_globals,
+            sync_gui_fn=sync_gui
         )
-        print("[NM] tuner started — it will run ~10 s trials until it finds better J.")
+        print("[NM] Tuner started in background. System will continue running.")
 
     # Start a ~10 s scoring trial:
     # - Reset integrators so trials are comparable (no old integral windup)
