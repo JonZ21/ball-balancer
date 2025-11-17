@@ -53,7 +53,7 @@ Ki = 0.0688
 
 # PID tuning ranges for sliders
 Kp_max = 1
-Ki_max = 0.8
+Ki_max = 1
 Kd_max = 1
 slider_resolution = 1000  # Higher resolution for finer tuning
 
@@ -65,9 +65,9 @@ deadzone_max = 20.0  # maximum deadzone radius
 min_motor_angle = 0
 max_motor_angle = 20
 
-motor1_pid = PIDcontroller(Kp, Kd, Ki, min_motor_angle, max_motor_angle)
-motor2_pid = PIDcontroller(Kp, Kd, Ki, min_motor_angle +6, max_motor_angle +6)
-motor3_pid = PIDcontroller(Kp, Kd, Ki, min_motor_angle, max_motor_angle)
+motor1_pid = PIDcontroller(Kp, Ki, Kd, min_motor_angle, max_motor_angle)  #PID not PDI
+motor2_pid = PIDcontroller(Kp, Ki, Kd, min_motor_angle +6, max_motor_angle +6)
+motor3_pid = PIDcontroller(Kp, Ki, Kd, min_motor_angle, max_motor_angle)
 
 # Global variables for GUI
 pid_gains_lock = threading.Lock()
