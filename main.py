@@ -422,20 +422,19 @@ while(True):
     #Calculate the ball position
     found, x, y, radius =  detect.detect_ball(frame)#Placeholder, Kean's function should output a 2D numpy array
 
+    center = np.array(center_point_px)
     # Convert to numpy arrays - only if ball is detected
     if found and x is not None and y is not None:
         # detect_ball is called on the resized (320x240) frame, so x,y are already in the
         # resized coordinate system — do NOT divide by 2 here.
         ball_position = np.array([x, y])
+        # Center point (resized and cast to int earlier)
+        if plot_gui is not None:
+            px = float(x - center[0])
+            py = float(y - center[1])
+            plot_gui.add_data(px, py)
     else:
         ball_position = None
-
-    # Center point (resized and cast to int earlier)
-    center = np.array(center_point_px)
-    if plot_gui is not None:
-        px = float(x - center[0])
-        py = float(y - center[1])
-        plot_gui.add_data(px, py)
 
     print("center point px:", center_point_px[0], center_point_px[1])
     print(f"Ball Position: {ball_position}, Center: {center}")
