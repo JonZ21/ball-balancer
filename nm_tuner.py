@@ -88,15 +88,12 @@ def apply_gains(motor_pids, kp, ki, kd, reset_integral=True,
         if reset_integral:
             pid.reset_integral()
 
-def run_trial(pid_list, trial_duration_s, w1, w2, pctl, gains):
-    """Execute one complete performance trial with specified PID gains.
+def run_trial(pid_list, trial_duration_s, w1, w2, w3, pctl, gains):
+    """Run a single hardware trial and return the performance score.
     
-    This is the core evaluation function used by the Nelder-Mead optimizer.
-    Each call performs a full trial on the actual hardware:
-    
-    TRIAL SEQUENCE:
-      1. Validate and clip proposed gains to safe bounds
-      2. Apply gains to all three motor PIDs
+    This function coordinates a complete trial by:
+      1. Applying the test gains to all PID controllers
+      2. Printing a countdown so operator can prepare
       3. Reset PID integral terms (ensures fair comparison)
       4. Signal trial start to scoring module
       5. Wait for trial_duration_s while system runs
@@ -114,6 +111,7 @@ def run_trial(pid_list, trial_duration_s, w1, w2, pctl, gains):
         trial_duration_s: How long to run trial (typically 10 seconds)
         w1: Weight for IAE in score calculation
         w2: Weight for percentile error in score calculation
+        w3: Weight for oscillation penalty in score calculation
         pctl: Percentile to use (e.g., 95 for P95)
         gains: Tuple of (Kp, Ki, Kd) to test
     
@@ -125,7 +123,7 @@ def run_trial(pid_list, trial_duration_s, w1, w2, pctl, gains):
            - Typical bad scores: 200+
     
     Example:
-        >>> score = run_trial([pid1, pid2, pid3], 10.0, 1.0, 0.7, 95, (0.2, 0.1, 0.15))
+        >>> score = run_trial([pid1, pid2, pid3], 10.0, 1.0, 0.7, 0.5, 95, (0.2, 0.1, 0.15))
         [NM] try  Kp=0.2000 Ki=0.1000 Kd=0.1500  ->  J=67.342
         >>> print(f"Trial score: {score}")
         Trial score: 67.342
@@ -160,7 +158,7 @@ def run_trial(pid_list, trial_duration_s, w1, w2, pctl, gains):
     time.sleep(trial_duration_s)
     
     # Step 5: Signal scoring module to stop and compute score
-    J, parts = finish_and_score(w1=w1, w2=w2, pctl=pctl)
+    J, parts = finish_and_score(w1=w1, w2=w2, w3=w3, pctl=pctl)
     
     # Step 6: Handle trial failure
     if J is None:
@@ -177,7 +175,7 @@ def run_trial(pid_list, trial_duration_s, w1, w2, pctl, gains):
     print(f"[NM] TRIAL COMPLETE:")
     print(f"     Gains: Kp={kp:.4f} Ki={ki:.4f} Kd={kd:.4f}")
     print(f"     Score: J={J:.3f}")
-    print(f"     Breakdown: IAE={parts['IAE']:.2f}, {percentile_key}={parts[percentile_key]:.2f}")
+    print(f"     Breakdown: IAE={parts['IAE']:.2f}, {percentile_key}={parts[percentile_key]:.2f}, OSC={parts['OSC']:.2f}")
     print(f"     Samples: N={parts['N']}, Duration={parts.get('duration', 'N/A'):.2f}s")
     
     return float(J)
@@ -226,10 +224,10 @@ def nelder_mead_minimize(f, x0, scale=0.3, max_iter=20, tol_f=1e-3, tol_x=1e-3):
       S: Array of simplex vertices (4 rows × 3 columns)
          Each row = one set of (Kp, Ki, Kd) to try
       F: Array of scores for each vertex (4 numbers)
-         F[0] = score for S[0], F[1] = score for S[1], etc.
-    """
+    # Step 5: Signal scoring module to stop and compute score
+    J, parts = finish_and_score(w1=w1, w2=w2, w3=w3, pctl=pctl)
     
-    # ========================================================================
+    # Step 6: Handle trial failure============================================
     # STEP 1: Create initial simplex (4 starting points)
     # ========================================================================
     # Start with your initial guess x0, then nudge each gain slightly
@@ -239,13 +237,13 @@ def nelder_mead_minimize(f, x0, scale=0.3, max_iter=20, tol_f=1e-3, tol_x=1e-3):
     #   S[2] = [0.16, 0.17, 0.14]  ← nudged Ki
     #   S[3] = [0.16, 0.07, 0.24]  ← nudged Kd
     S = make_initial_simplex(x0, scale=scale)
-    
-    # ========================================================================
-    # STEP 2: Evaluate initial simplex (run 4 trials)
-    # ========================================================================
-    # f(v) calls run_trial() which runs the hardware for 10s and returns score J
-    # This takes ~40 seconds (4 trials × 10s each)
-    F = np.array([f(vertex) for vertex in S], dtype=float)
+    # Step 7: Report results
+    percentile_key = f"P{pctl}"
+    print(f"[NM] TRIAL COMPLETE:")
+    print(f"     Gains: Kp={kp:.4f} Ki={ki:.4f} Kd={kd:.4f}")
+    print(f"     Score: J={J:.3f}")
+    print(f"     Breakdown: IAE={parts['IAE']:.2f}, {percentile_key}={parts[percentile_key]:.2f}, OSC={parts['OSC']:.2f}")
+    print(f"     Samples: N={parts['N']}, Duration={parts.get('duration', 'N/A'):.2f}s")
     
     print("[NM] Initial simplex (4 starting guesses):")
     for i in range(S.shape[0]):
@@ -460,11 +458,11 @@ def nelder_mead_minimize(f, x0, scale=0.3, max_iter=20, tol_f=1e-3, tol_x=1e-3):
     print(f"     Final score: J={best_score:.3f}")
     
     return best_gains, float(best_score)
-
+"""
 def start_nm_tuning(
     motor_pids,                           # [pid1, pid2, pid3]
     trial_sec=10.0,                       # each trial duration
-    w1=1.0, w2=0.7, pctl=95,
+    w1=1.0, w2=0.7, w3=0.3, pctl=95,
     x0=(0.16, 0.07, 0.14),                # initial (Kp,Ki,Kd)
     scale=0.3,
     max_iter=20,
@@ -481,16 +479,16 @@ def start_nm_tuning(
         sync_gui_fn: Function to sync GUI sliders after optimization
     """
     def worker():
-        print("[NM] starting tuner…")
+        print("[NM] starting tuner...")
         x0_np = np.array(x0, dtype=float)
 
-        # wrap f(gains) → calls one physical trial to get J
+        # wrap f(gains) -> calls one physical trial to get J
         def f_eval(g: np.ndarray) -> float:
             kp, ki, kd = clip_gains(*g)
             return run_trial(
                 pid_list=motor_pids,
                 trial_duration_s=trial_sec,
-                w1=w1, w2=w2, pctl=pctl,
+                w1=w1, w2=w2, w3=w3, pctl=pctl,
                 gains=(kp, ki, kd)
             )
 
@@ -504,7 +502,7 @@ def start_nm_tuning(
         )
         kp, ki, kd = clip_gains(*best_g)
         print("\n" + "="*70)
-        print(f"[NM] ★ OPTIMIZATION COMPLETE ★")
+        print(f"[NM]  OPTIMIZATION COMPLETE ")
         print(f"[NM] BEST  Kp={kp:.4f}  Ki={ki:.4f}  Kd={kd:.4f}   ->   J={best_J:.3f}")
         print("="*70 + "\n")
         apply_gains(motor_pids, kp, ki, kd, reset_integral=False,

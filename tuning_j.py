@@ -13,11 +13,12 @@ TYPICAL WORKFLOW:
   4. Lower J score = better performance
 
 SCORE FORMULA:
-  J = w1 * IAE + w2 * P95
+  J = w1 * IAE + w2 * P95 + w3 * OSC
   where:
     - IAE = sum of all radial errors * dt (integrated error)
     - P95 = 95th percentile of radial errors (measures peak errors)
-    - w1, w2 = weights to balance steady-state vs transient performance
+    - OSC = sum of error rate changes (measures oscillation/wiggling)
+    - w1, w2, w3 = weights to balance steady-state, transient, and oscillation
 
 USE CASES:
   - Manual tuning: Compare different gain settings
@@ -105,7 +106,7 @@ def log_sample(xy_error):
     radial_error = float(np.linalg.norm(xy_error))
     E.append(radial_error)
 
-def finish_and_score(w1=1.4, w2=0.3, pctl=95):
+def finish_and_score(w1=1.0, w2=0.7, w3=0.3, pctl=95):
     """Complete the trial and compute the performance score.
     
     This function:
@@ -123,6 +124,10 @@ def finish_and_score(w1=1.4, w2=0.3, pctl=95):
             Higher w2 = penalize transient spikes more
             Typical range: 0.3 - 1.5
         
+        w3: Weight for oscillation penalty (error velocity)
+            Higher w3 = penalize rapid changes/wiggling more
+            Typical range: 0.3 - 1.0
+        
         pctl: Percentile to use (e.g., 95 = P95)
               95 = ignore worst 5% of errors
               90 = ignore worst 10% of errors
@@ -136,6 +141,7 @@ def finish_and_score(w1=1.4, w2=0.3, pctl=95):
           parts: Dictionary with breakdown:
             - 'IAE': Integral of absolute error
             - 'P95': 95th percentile error (or other pctl)
+            - 'OSC': Oscillation metric (sum of error rate changes)
             - 'dt': Time step used
             - 'N': Number of samples collected
     
@@ -178,14 +184,42 @@ def finish_and_score(w1=1.4, w2=0.3, pctl=95):
     # Units: pixels
     Pctl = np.percentile(radial_errors, pctl)
     
+    # ---- Compute Oscillation Penalty (OSC) ----
+    # This measures how much the ball "wiggles" near center
+    # High oscillation = poor damping or too much derivative gain
+    # Method: Sum of absolute changes in error (Total Variation), but only when near center
+    # Formula: OSC = Σ |error[i+1] - error[i]| for all i where error[i] < threshold
+    # Units: pixels (cumulative change, scales with trial length)
+    # 
+    # Why only near center (< 20px):
+    #   - Large swings during correction are acceptable (ball recovering from edge)
+    #   - Oscillations near center indicate poor damping and should be penalized
+    #   - This focuses optimization on steady-state stability
+    # 
+    # Why this scales properly:
+    #   - Longer trials → more samples → more changes to sum
+    #   - A perfectly stable system has OSC ≈ 0 regardless of trial length
+    #   - An oscillating system accumulates OSC proportional to trial duration
+    if len(radial_errors) > 1:
+        NEAR_CENTER_THRESHOLD = 30.0  # pixels - only count oscillations near center
+        error_changes = np.abs(np.diff(radial_errors))  # |e[i+1] - e[i]|
+        
+        # Only count oscillations when BOTH adjacent errors are near center
+        # This prevents penalizing large corrections when ball is far from center
+        near_center_mask = (radial_errors[:-1] < NEAR_CENTER_THRESHOLD) & (radial_errors[1:] < NEAR_CENTER_THRESHOLD)
+        OSC = np.sum(error_changes[near_center_mask])  # Total variation near center only
+    else:
+        OSC = 0.0
+    
     # ---- Compute Composite Score J ----
-    # Weighted combination of steady-state and transient performance
-    J = w1 * IAE + w2 * Pctl
+    # Weighted combination of steady-state, transient, and oscillation performance
+    J = w1 * IAE + w2 * Pctl + w3 * OSC
     
     # Package detailed results
     parts = {
         "IAE": float(IAE),
         f"P{pctl}": float(Pctl),
+        "OSC": float(OSC),
         "dt": float(dt),
         "N": int(len(radial_errors)),
         "duration": float(timestamps[-1]),  # Total trial duration

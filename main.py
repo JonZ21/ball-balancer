@@ -19,7 +19,7 @@ detect = BallDetector("config.json")
 cap = cv2.VideoCapture(config['camera']['index'], cv2.CAP_DSHOW)
 cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 # Load and resize calibration data by 2 (divide by 2 for 320x240 frame)
-center_point_px = tuple((np.array(config['camera']['center_point_px']) / 2).astype(int))
+center_point_px = tuple((np.array(config['camera']['center_point_px']) / 2).astype(float))
 platform_points = [tuple((np.array(pt) / 2).astype(int)) for pt in config['calibration']['platform_points']]
 u1 = np.array(config['calibration']['unit_vectors']['u1'])
 u2 = np.array(config['calibration']['unit_vectors']['u2'])  
@@ -350,7 +350,7 @@ while(True):
         start_nm_tuning(
             motor_pids=(motor1_pid, motor2_pid, motor3_pid),
             trial_sec=10.0,
-            w1=1.0, w2=0.7, pctl=95,
+            w1=1.0, w2=0.7, w3=1.2, pctl=95,
             x0=x0,
             scale=0.5,
             max_iter=10,
@@ -373,12 +373,12 @@ while(True):
     # End trial and compute J = w1*IAE + w2*P95 on raw r[k] (no filtering).
     # Prints both the overall score and a breakdown useful for debugging.
     elif key == ord('e'):
-        J, parts = finish_and_score(w1=1.0, w2=0.7, pctl=95)
+        J, parts = finish_and_score(w1=1.0, w2=0.7, w3=0.5, pctl=95)
         if J is None:
             print("[TUNE] Not enough samples to score.")
         else:
             print(f"[TUNE] J={J:.3f}  IAE={parts['IAE']:.2f}  "
-                f"P95={parts['P95']:.2f}  N={parts['N']}  dt≈{parts['dt']:.3f}s")
+                f"P95={parts['P95']:.2f}  OSC={parts['OSC']:.2f}  N={parts['N']}  dt≈{parts['dt']:.3f}s")
 
 
     #Calculate the ball position
@@ -388,12 +388,12 @@ while(True):
     if found and x is not None and y is not None:
         # detect_ball is called on the resized (320x240) frame, so x,y are already in the
         # resized coordinate system — do NOT divide by 2 here.
-        ball_position = np.array([x, y])
+        ball_position = np.array([x, y], dtype=float)
     else:
         ball_position = None
 
-    # Center point (resized and cast to int earlier)
-    center = np.array(center_point_px)
+    # Center point (kept as float for sub-pixel accuracy)
+    center = np.array(center_point_px, dtype=float)
     
     # ---- Build raw 2-D camera error and log it for scoring ----
     if ball_position is not None:
