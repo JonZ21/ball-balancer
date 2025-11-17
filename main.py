@@ -458,7 +458,6 @@ while(True):
     serial_port.send_servo_angles(motor1_command, motor2_command, motor3_command)
 
     # delay(10)
-    time.sleep(0.01)
 
     
 cap.release()

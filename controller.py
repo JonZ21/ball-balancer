@@ -22,7 +22,7 @@ def projected_errors (u1, u2, u3, ball_position, s, deadzone_radius, deadzone_co
     else:
         deadzone_count = 0
 
-    if deadzone_count < 30:
+    if deadzone_count > 30:
         print("deadzone exceeded. Setting 0")
         xy_error = np.array([0,0])
 
