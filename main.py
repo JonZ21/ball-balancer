@@ -47,9 +47,14 @@ serial_port.connect_serial()
 serial_port.send_servo_angles(10, 10, 10)
 
 #initialize PID controllers
-Kp = 0.1950
-Kd = 0.0872
-Ki = 0.0200
+# Kp = 0.1950
+# Kd = 0.0872
+# Ki = 0.0200
+
+# From autotune after 50 iterations
+Kp=0.1899  
+Ki=0.0000  
+Kd=0.1075 
 
 # from autotune after 40 
 # Kp=0.0801  
@@ -70,8 +75,10 @@ deadzone_max = 20.0  # maximum deadzone radius
 min_motor_angle = 0
 max_motor_angle = 20
 
+offset_motor_angle = 4  # degrees
+
 motor1_pid = PIDcontroller(Kp, Ki, Kd, min_motor_angle, max_motor_angle)  #PID not PDI
-motor2_pid = PIDcontroller(Kp, Ki, Kd, min_motor_angle +6, max_motor_angle +6)
+motor2_pid = PIDcontroller(Kp, Ki, Kd, min_motor_angle + offset_motor_angle, max_motor_angle + offset_motor_angle)
 motor3_pid = PIDcontroller(Kp, Ki, Kd, min_motor_angle, max_motor_angle)
 
 # Global variables for GUI
