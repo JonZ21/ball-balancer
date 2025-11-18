@@ -70,7 +70,7 @@ Kd_max = 1
 slider_resolution = 1000  # Higher resolution for finer tuning
 
 # Deadzone settings
-deadzone_radius = 10.0  # pixels
+deadzone_radius = 13.0  # pixels
 deadzone_max = 20.0  # maximum deadzone radius
 
 #Using placeholder motor angles for now, validate for each motor.
@@ -274,7 +274,7 @@ gui_thread.start()
 
 # Small delay to allow GUI to initialize
 time.sleep(0.5)
-
+count = 0 
 while(True):
     ret, frame = cap.read()
     frame = cv2.resize(frame, (320, 240))
@@ -411,7 +411,7 @@ while(True):
         deadzone_value = current_deadzone
 
     #Obtain and project the error onto each axis. All inputs are 2D numpy arrays
-    error_array = projected_errors(u1, u2, u3, ball_position, center, deadzone_value) #output array is: [axis 1, axis 2, axis 3]
+    error_array, count  = projected_errors(u1, u2, u3, ball_position, center, deadzone_value, count) #output array is: [axis 1, axis 2, axis 3]
 
     #run each PID controller
     motor1_command = motor1_pid.update(error_array[0])

@@ -1,6 +1,6 @@
 import numpy as np
 
-def projected_errors (u1, u2, u3, ball_position, s, deadzone_radius):
+def projected_errors (u1, u2, u3, ball_position, s, deadzone_radius, count):
     """Arguments: 
     u1, u2, u3 are the unit vectors (magnitude of 1)
     for each motor's axis on the stewart platform. They are an (x,y) list
@@ -13,18 +13,30 @@ def projected_errors (u1, u2, u3, ball_position, s, deadzone_radius):
     """
     #The 2D error vector:
     if ball_position is None or s is None:
-        return [0,0,0]
+        return [0,0,0], count
     
     xy_error = ball_position - s #Element wise numpy subtraction
 
     if np.linalg.norm(xy_error) < deadzone_radius:
-        xy_error = np.array([0,0])
+        count = count + 1
+    else:
+        count = 0 
+    
+    dead_zone_frames = 40
+
+    # Gradually ramp down xy_error exponentially from count=60 onwards
+    if count >= dead_zone_frames:
+        # Exponential decay: at count=60, scale=1.0 (full error)
+        #                    as count increases, scale → 0.0 exponentially
+        # exp(-0.02 * 0) = 1.0, exp(-0.02 * 100) ≈ 0.135
+        scale = np.exp(-0.008 * (count - dead_zone_frames))
+        xy_error = xy_error * scale
 
     #Obtain 1D errors by projecting onto the motors axis
     #returns an array of errors projected to each axis u1, u2, u3 respectively
     errors= [np.dot(u1, xy_error), np.dot(u2, xy_error), np.dot(u3, xy_error)] 
 
-    return errors
+    return errors, count
 
 class PIDcontroller:
     def __init__(self, Kp, Ki, Kd, min_motor_angle, max_motor_angle):
