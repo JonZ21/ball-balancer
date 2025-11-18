@@ -49,12 +49,12 @@ serial_port.send_servo_angles(10, 10, 10)
 #initialize PID controllers
 # Kp = 0.1950
 # Kd = 0.0872
-# Ki = 0.0200
+# Ki = 0.0200   
 
 # From autotune after 50 iterations
-Kp=0.1899  
-Ki=0.0000  
-Kd=0.1075 
+Kp = 0.2056
+Ki = 0.0012
+Kd = 0.1283
 
 # from autotune after 40 
 # Kp=0.0801  
