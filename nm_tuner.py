@@ -20,9 +20,9 @@ GAMMA = 2.0   # expansion
 RHO   = 0.5   # contraction
 SIGMA = 0.5   # shrink
 
-KP_MIN, KP_MAX = 0.0, 1.5
+KP_MIN, KP_MAX = 0.0, 2
 KI_MIN, KI_MAX = 0.0, 0.8
-KD_MIN, KD_MAX = 0.0, 1.5
+KD_MIN, KD_MAX = 0.0, 2
 
 def clip_gains(kp, ki, kd):
     """Clamp PID gains to safe, physically reasonable bounds.
@@ -88,7 +88,7 @@ def apply_gains(motor_pids, kp, ki, kd, reset_integral=True,
         if reset_integral:
             pid.reset_integral()
 
-def run_trial(pid_list, trial_duration_s, w1, w2, pctl, gains):
+def run_trial(pid_list, trial_duration_s, w1, w2, w3, pctl, gains):
     """Execute one complete performance trial with specified PID gains.
     
     This is the core evaluation function used by the Nelder-Mead optimizer.
@@ -160,7 +160,7 @@ def run_trial(pid_list, trial_duration_s, w1, w2, pctl, gains):
     time.sleep(trial_duration_s)
     
     # Step 5: Signal scoring module to stop and compute score
-    J, parts = finish_and_score(w1=w1, w2=w2, pctl=pctl)
+    J, parts = finish_and_score(w1=w1, w2=w2, w3=w3, pctl=pctl)
     
     # Step 6: Handle trial failure
     if J is None:
@@ -464,7 +464,7 @@ def nelder_mead_minimize(f, x0, scale=0.3, max_iter=20, tol_f=1e-3, tol_x=1e-3):
 def start_nm_tuning(
     motor_pids,                           # [pid1, pid2, pid3]
     trial_sec=10.0,                       # each trial duration
-    w1=1.0, w2=0.7, pctl=95,
+    w1=1.0, w2=0.7, w3=1.2, pctl=95,
     x0=(0.16, 0.07, 0.14),                # initial (Kp,Ki,Kd)
     scale=0.3,
     max_iter=20,
@@ -490,7 +490,7 @@ def start_nm_tuning(
             return run_trial(
                 pid_list=motor_pids,
                 trial_duration_s=trial_sec,
-                w1=w1, w2=w2, pctl=pctl,
+                w1=w1, w2=w2, w3=w3, pctl=pctl,
                 gains=(kp, ki, kd)
             )
 

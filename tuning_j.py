@@ -105,7 +105,7 @@ def log_sample(xy_error):
     radial_error = float(np.linalg.norm(xy_error))
     E.append(radial_error)
 
-def finish_and_score(w1=1.4, w2=0.3, pctl=95):
+def finish_and_score(w1=1.4, w2=0.3, w3=1.2, pctl=95):
     """Complete the trial and compute the performance score.
     
     This function:
@@ -177,15 +177,26 @@ def finish_and_score(w1=1.4, w2=0.3, pctl=95):
     # P95 = value below which 95% of errors fall
     # Units: pixels
     Pctl = np.percentile(radial_errors, pctl)
-    
-    # ---- Compute Composite Score J ----
-    # Weighted combination of steady-state and transient performance
-    J = w1 * IAE + w2 * Pctl
-    
-    # Package detailed results
+    if len(radial_errors) > 1:
+        NEAR_CENTER_THRESHOLD = 22.0  # pixels - only count oscillations near center
+        error_changes = np.abs(np.diff(radial_errors))  # |e[i+1] - e[i]|
+
+        # Only count oscillations when BOTH adjacent errors are near center
+        # This prevents penalizing large corrections when ball is far from center
+        near_center_mask = (radial_errors[:-1] < NEAR_CENTER_THRESHOLD) & (radial_errors[1:] < NEAR_CENTER_THRESHOLD)
+        OSC = np.sum(error_changes[near_center_mask])  # Total variation near center only
+    else:
+        OSC = 0.0
+
+# ---- Compute Composite Score J ----
+# Weighted combination of steady-state, transient, and oscillation performance
+    J = w1 * IAE + w2 * Pctl + w3 * OSC
+
+# Package detailed results
     parts = {
         "IAE": float(IAE),
         f"P{pctl}": float(Pctl),
+        "OSC": float(OSC),
         "dt": float(dt),
         "N": int(len(radial_errors)),
         "duration": float(timestamps[-1]),  # Total trial duration

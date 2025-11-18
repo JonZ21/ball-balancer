@@ -58,7 +58,7 @@ class PIDcontroller:
 
     def update(self, error, dt=0.033): #default dt is ~30fps the inverse of that is the seconds
         # Proportional term
-
+    
         P = self.Kp * error
         self.integral += error * dt
         I = self.Ki * self.integral
