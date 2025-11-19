@@ -84,6 +84,11 @@ motor3_pid = PIDcontroller(Kp, Ki, Kd, min_motor_angle, max_motor_angle)
 # Last valid camera error (used if detection drops out briefly)
 last_xy_error = np.array([0.0, 0.0], dtype=float)
 
+# Global variables for setpoint
+use_custom_setpoint = False
+custom_setpoint = center_point_px  # Initialize to center
+setpoint_lock = threading.Lock()
+
 # Global variables for GUI
 pid_gains_lock = threading.Lock()
 current_kp = Kp
@@ -101,7 +106,7 @@ class PIDTuningGUI:
 
         self.root.title("PID Tuning")
         # Larger window for better visibility
-        self.root.geometry("550x800+850+100")  # Position window beside video feed (x=850, y=100)
+        self.root.geometry("550x1000+850+100")  # Position window beside video feed (x=850, y=100)
         self.root.resizable(True, True)
 
         # Main frame
@@ -176,8 +181,39 @@ class PIDTuningGUI:
         reset_button.grid(row=11, column=0, columnspan=3, pady=10, sticky=(tk.E, tk.W))
         reset_button.configure(style='Big.TButton')
 
+        # Setpoint controls frame
+        setpoint_frame = ttk.LabelFrame(main_frame, text="Setpoint Control", padding="15")
+        setpoint_frame.grid(row=12, column=0, columnspan=3, pady=25, sticky=(tk.W, tk.E))
+
+        # Current setpoint display
+        self.setpoint_status_label = ttk.Label(setpoint_frame, text="Using: Center Point", font=("Arial", 14, "bold"))
+        self.setpoint_status_label.grid(row=0, column=0, columnspan=2, pady=(0, 10))
+
+        # X coordinate input
+        ttk.Label(setpoint_frame, text="X:", font=("Arial", 12)).grid(row=1, column=0, sticky=tk.E, padx=(0, 5))
+        self.setpoint_x_entry = ttk.Entry(setpoint_frame, width=10, font=("Arial", 12))
+        self.setpoint_x_entry.insert(0, str(center_point_px[0]))
+        self.setpoint_x_entry.grid(row=1, column=1, sticky=tk.W, pady=5)
+
+        # Y coordinate input
+        ttk.Label(setpoint_frame, text="Y:", font=("Arial", 12)).grid(row=2, column=0, sticky=tk.E, padx=(0, 5))
+        self.setpoint_y_entry = ttk.Entry(setpoint_frame, width=10, font=("Arial", 12))
+        self.setpoint_y_entry.insert(0, str(center_point_px[1]))
+        self.setpoint_y_entry.grid(row=2, column=1, sticky=tk.W, pady=5)
+
+        # Set Setpoint button
+        set_setpoint_button = ttk.Button(setpoint_frame, text="Set Custom Setpoint", command=self.set_custom_setpoint)
+        set_setpoint_button.grid(row=3, column=0, columnspan=2, pady=10, sticky=(tk.E, tk.W))
+        set_setpoint_button.configure(style='Big.TButton')
+
+        # Use Center button
+        use_center_button = ttk.Button(setpoint_frame, text="Use Center Point", command=self.use_center_setpoint)
+        use_center_button.grid(row=4, column=0, columnspan=2, pady=5, sticky=(tk.E, tk.W))
+        use_center_button.configure(style='Big.TButton')
+
         # Update current values periodically
         self.update_current_values()
+        self.update_setpoint_display()
     
     def update_kp_label(self, value):
         """Update Kp label as slider moves."""
@@ -255,6 +291,49 @@ class PIDTuningGUI:
             self.kd_scale.set(current_kd)
         print("[GUI] Sliders synced with optimized gains")
 
+    def set_custom_setpoint(self):
+        """Set a custom setpoint from the entry fields."""
+        global use_custom_setpoint, custom_setpoint
+        try:
+            x = int(self.setpoint_x_entry.get())
+            y = int(self.setpoint_y_entry.get())
+
+            with setpoint_lock:
+                custom_setpoint = (x, y)
+                use_custom_setpoint = True
+
+            print(f"[SETPOINT] Custom setpoint set to ({x}, {y})")
+        except ValueError:
+            print("[SETPOINT] Error: Invalid X or Y value. Please enter integers.")
+
+    def use_center_setpoint(self):
+        """Switch back to using the center point."""
+        global use_custom_setpoint
+
+        with setpoint_lock:
+            use_custom_setpoint = False
+
+        # Reset entry fields to center
+        self.setpoint_x_entry.delete(0, tk.END)
+        self.setpoint_x_entry.insert(0, str(center_point_px[0]))
+        self.setpoint_y_entry.delete(0, tk.END)
+        self.setpoint_y_entry.insert(0, str(center_point_px[1]))
+
+        print("[SETPOINT] Using center point")
+
+    def update_setpoint_display(self):
+        """Update the setpoint status display."""
+        global use_custom_setpoint, custom_setpoint
+
+        with setpoint_lock:
+            if use_custom_setpoint:
+                self.setpoint_status_label.config(text=f"Using: Custom ({custom_setpoint[0]}, {custom_setpoint[1]})")
+            else:
+                self.setpoint_status_label.config(text="Using: Center Point")
+
+        # Schedule next update
+        self.root.after(100, self.update_setpoint_display)
+
 # Global reference to GUI app for NM tuner to update sliders
 gui_app = None
 
@@ -311,6 +390,20 @@ while(True):
 
     # Draw deadzone circle overlay
     cv2.circle(overlay, center_point_px, int(display_deadzone), (255, 0, 255), 2)
+
+    # Draw current setpoint marker
+    with setpoint_lock:
+        if use_custom_setpoint:
+            setpoint_to_draw = custom_setpoint
+            # Draw custom setpoint as a blue crosshair
+            cross_size = 10
+            cv2.line(overlay, (setpoint_to_draw[0] - cross_size, setpoint_to_draw[1]),
+                    (setpoint_to_draw[0] + cross_size, setpoint_to_draw[1]), (255, 255, 0), 2)
+            cv2.line(overlay, (setpoint_to_draw[0], setpoint_to_draw[1] - cross_size),
+                    (setpoint_to_draw[0], setpoint_to_draw[1] + cross_size), (255, 255, 0), 2)
+            cv2.circle(overlay, setpoint_to_draw, 5, (255, 255, 0), -1)
+            cv2.putText(overlay, "SETPOINT", (setpoint_to_draw[0] - 35, setpoint_to_draw[1] - 15),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 0), 1)
 
     # Display the frame with overlays
     # Display the frame with overlays
@@ -391,12 +484,16 @@ while(True):
     else:
         ball_position = None
 
-    # Center point (resized and cast to int earlier)
-    center = np.array(center_point_px)
-    
+    # Get the current setpoint (either center or custom)
+    with setpoint_lock:
+        if use_custom_setpoint:
+            current_setpoint = np.array(custom_setpoint)
+        else:
+            current_setpoint = np.array(center_point_px)
+
     # ---- Build raw 2-D camera error and log it for scoring ----
     if ball_position is not None:
-        xy_error = ball_position - center          # shape (2,)
+        xy_error = ball_position - current_setpoint          # shape (2,)
         last_xy_error = xy_error
     else:
         xy_error = last_xy_error                   # keep logging during short dropouts
@@ -404,14 +501,14 @@ while(True):
     log_sample(xy_error)                           # no-op unless a trial is active
 
     # print("center point px:", center_point_px[0], center_point_px[1])
-    # print(f"Ball Position: {ball_position}, Center: {center}")
+    # print(f"Ball Position: {ball_position}, Setpoint: {current_setpoint}")
 
     # Get current deadzone value
     with pid_gains_lock:
         deadzone_value = current_deadzone
 
     #Obtain and project the error onto each axis. All inputs are 2D numpy arrays
-    error_array, count  = projected_errors(u1, u2, u3, ball_position, center, deadzone_value, count) #output array is: [axis 1, axis 2, axis 3]
+    error_array, count  = projected_errors(u1, u2, u3, ball_position, current_setpoint, deadzone_value, count) #output array is: [axis 1, axis 2, axis 3]
 
     #run each PID controller
     motor1_command = motor1_pid.update(error_array[0])
