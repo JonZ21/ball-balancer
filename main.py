@@ -54,14 +54,14 @@ serial_port.send_servo_angles(10, 10, 10)
 #Kp = 0.16
 #Ki = 0.007
 #Kd = 0.09
-Kp = 0.2056
-Ki = 0.0012
-Kd = 0.1283
+Kp = 0.1953
+Ki = 0.0010
+Kd = 0.1372
 #Kp=0.1956  Ki=0.0000  Kd=0.1150   ->   J=525.398
 #BEST  Kp=0.2015  Ki=0.0011  Kd=0.1438   ->   J=610.338
 #Starting trial with Kp=0.2022, Ki=0.0011, Kd=0.1232.
 #tarting trial with Kp=0.2056, Ki=0.0012, Kd=0.1283 this converged
-
+#BEST  Kp=0.1953  Ki=0.0010  Kd=0.1372   ->   J=623.524
 
 # PID tuning ranges for sliders
 Kp_max = 1
@@ -348,11 +348,11 @@ while(True):
         
         start_nm_tuning(
             motor_pids=(motor1_pid, motor2_pid, motor3_pid),
-            trial_sec= 21.0,
-            w1=4.0, w2=0.8, w3=0.6, pctl=95,
+            trial_sec= 17.0,
+            w1= 2, w2=0.8, w3=3.5, pctl=95,
             x0=x0,
             scale=0.4,
-            max_iter= 18,
+            max_iter= 14,
             gains_lock=pid_gains_lock,
             update_globals_fn=update_globals,
             sync_gui_fn=sync_gui
@@ -377,7 +377,7 @@ while(True):
             print("[TUNE] Not enough samples to score.")
         else:
             print(f"[TUNE] J={J:.3f}  IAE={parts['IAE']:.2f}  "
-                f"P95={parts['P95']:.2f}  N={parts['N']}  dt≈{parts['dt']:.3f}s")
+                f"P95={parts['P95']:.2f} OSC={parts['OSC']:.2f}  N={parts['N']}  dt≈{parts['dt']:.3f}s")
 
 
     #Calculate the ball position

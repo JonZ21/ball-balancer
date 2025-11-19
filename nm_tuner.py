@@ -177,7 +177,7 @@ def run_trial(pid_list, trial_duration_s, w1, w2, w3, pctl, gains):
     print(f"[NM] TRIAL COMPLETE:")
     print(f"     Gains: Kp={kp:.4f} Ki={ki:.4f} Kd={kd:.4f}")
     print(f"     Score: J={J:.3f}")
-    print(f"     Breakdown: IAE={parts['IAE']:.2f}, {percentile_key}={parts[percentile_key]:.2f}")
+    print(f"     Breakdown: IAE={parts['IAE']:.2f}, {percentile_key}={parts[percentile_key]:.2f}, OSC={parts['OSC']:.2f}")
     print(f"     Samples: N={parts['N']}, Duration={parts.get('duration', 'N/A'):.2f}s")
     
     return float(J)
