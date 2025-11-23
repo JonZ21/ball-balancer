@@ -351,6 +351,179 @@ def run_gui():
 gui_thread = threading.Thread(target=run_gui, daemon=True)
 gui_thread.start()
 
+#This is a gui class that will live update. 
+
+import matplotlib
+matplotlib.use("TkAgg")
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
+
+class TrackingPlotGUI:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Ball Position Tracking")
+        self.root.geometry("900x800+1450+100")
+        self.root.resizable(True, True)
+
+        # Data storage
+        self.time_history = []
+        self.x_history = []
+        self.y_history = []
+        self.xy_mag_history = []
+        self.start_time = time.time()
+
+        # Matplotlib figure
+        self.fig = Figure(figsize=(8, 8), dpi=100)
+        self.ax_x = self.fig.add_subplot(311)
+        self.ax_y = self.fig.add_subplot(312)
+        self.ax_xy = self.fig.add_subplot(313)
+
+        self.ax_x.set_title("X Position")
+        self.ax_y.set_title("Y Position")
+        self.ax_xy.set_title("XY Magnitude")
+
+        for ax in [self.ax_x, self.ax_y, self.ax_xy]:
+            ax.grid(True)
+
+        # Canvas in tkinter
+        self.canvas = FigureCanvasTkAgg(self.fig, master=self.root)
+        self.canvas_widget = self.canvas.get_tk_widget()
+        self.canvas_widget.pack(fill=tk.BOTH, expand=True)
+
+        # Buttons
+        btn_frame = ttk.Frame(self.root)
+        btn_frame.pack(fill=tk.X, pady=10)
+
+        save_btn = ttk.Button(btn_frame, text="Save + Clear", command=self.save_and_clear)
+        save_btn.pack(side=tk.LEFT, padx=10)
+
+        clear_btn = ttk.Button(btn_frame, text="Clear", command=self.clear_plots)
+        clear_btn.pack(side=tk.LEFT, padx=10)
+
+        # Schedule updates
+        self.update_plots()
+
+    def add_data(self, x, y):
+        """Called from main loop. Safe even if x,y = None."""
+        if x is None or y is None:
+            return
+        
+        t = time.time() - self.start_time
+        mag = np.sqrt(x*x + y*y)
+
+        self.time_history.append(t)
+        self.x_history.append(x)
+        self.y_history.append(y)
+        self.xy_mag_history.append(mag)
+
+    def update_plots(self):
+        """Refresh the plots live"""
+        if len(self.time_history) > 1:
+            self.ax_x.cla()
+            self.ax_y.cla()
+            self.ax_xy.cla()
+
+            self.ax_x.plot(self.time_history, self.x_history)
+            self.ax_y.plot(self.time_history, self.y_history)
+            self.ax_xy.plot(self.time_history, self.xy_mag_history)
+
+            self.ax_x.set_title("X Position")
+            self.ax_y.set_title("Y Position")
+            self.ax_xy.set_title("XY Magnitude")
+
+            for ax in [self.ax_x, self.ax_y, self.ax_xy]:
+                ax.grid(True)
+
+        self.canvas.draw()
+        self.root.after(100, self.update_plots)
+
+    def clear_plots(self):
+        """Clear history + plots"""
+        self.time_history.clear()
+        self.x_history.clear()
+        self.y_history.clear()
+        self.xy_mag_history.clear()
+
+    # def save_and_clear(self):
+    #     """Save data to CSV for MATLAB/Excel, then clear."""
+    #     if len(self.time_history) == 0:
+    #         print("[TRACK] No data to save.")
+    #         return
+
+    #     filename = f"ball_tracking_{int(time.time())}.csv"
+        
+    #     data = np.vstack([self.time_history,
+    #                       self.x_history,
+    #                       self.y_history,
+    #                       self.xy_mag_history]).T
+
+    #     np.savetxt(filename,
+    #                data,
+    #                delimiter=",",
+    #                header="time,x,y,xy_magnitude",
+    #                comments="")
+
+    #     print(f"[TRACK] Saved: {filename}")
+    #     self.clear_plots()
+
+    def save_and_clear(self):
+        """Save tracking data to a single CSV with PID gains at the top, then clear."""
+        global current_kp, current_ki, current_kd, current_deadzone
+        
+        if len(self.time_history) == 0:
+            print("[TRACK] No data to save.")
+            return
+
+        filename = f"ball_tracking_{int(time.time())}.csv"
+
+        # Stack data for saving
+        data = np.vstack([self.time_history,
+                        self.x_history,
+                        self.y_history,
+                        self.xy_mag_history]).T
+
+        # ----- Write CSV with PID gains at the top -----
+        with open(filename, "w") as f:
+            # Write PID gain header
+            f.write(f"# PID Gains\n")
+            f.write(f"# Kp = {current_kp:.6f}\n")
+            f.write(f"# Ki = {current_ki:.6f}\n")
+            f.write(f"# Kd = {current_kd:.6f}\n")
+            f.write(f"# Deadzone = {current_deadzone:.3f}\n")
+            f.write("# -------------------------------------\n")
+            # Column headers
+            f.write("time,x,y,xy_magnitude\n")
+
+            # Write data rows
+            for row in data:
+                f.write(",".join(str(v) for v in row) + "\n")
+
+        print(f"[TRACK] Saved with PID gains at top: {filename}")
+
+        # Clear for next run
+        self.clear_plots()
+
+
+def run_plot_gui():
+    root = tk.Tk()
+    global plot_gui
+    plot_gui = TrackingPlotGUI(root)
+    try:
+        root.mainloop()
+    except KeyboardInterrupt:
+        pass
+
+plot_gui = threading.Thread(target = run_plot_gui, daemon = True)
+plot_gui.start()
+
+# Start GUI in a separate thread
+# gui_thread = threading.Thread(target=run_gui, daemon=True)
+# gui_thread.start()
+
+# # Small delay to allow GUI to initialize
+# time.sleep(0.5)
+
+
 # Small delay to allow GUI to initialize
 time.sleep(0.5)
 count = 0 
@@ -476,11 +649,18 @@ while(True):
     #Calculate the ball position
     found, x, y, radius =  detect.detect_ball(frame)#Placeholder, Kean's function should output a 2D numpy array
 
+    center = np.array(center_point_px)
     # Convert to numpy arrays - only if ball is detected
     if found and x is not None and y is not None:
         # detect_ball is called on the resized (320x240) frame, so x,y are already in the
         # resized coordinate system — do NOT divide by 2 here.
         ball_position = np.array([x, y])
+
+        if plot_gui is not None:
+            px = float(x - center[0])
+            py = float(y - center[1])
+            plot_gui.add_data(px, py)
+
     else:
         ball_position = None
 
