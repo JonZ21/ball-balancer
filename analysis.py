@@ -152,7 +152,7 @@ def load_csv(path: str) -> pd.DataFrame:
     return df
 
 
-def analyze_and_plot(csv_path: str, save: bool = True) -> str:
+def analyze_and_plot(csv_path: str, save: bool = True, return_metrics: bool = False):
     df = load_csv(csv_path)
 
     # Identify time and error series
@@ -261,17 +261,68 @@ def analyze_and_plot(csv_path: str, save: bool = True) -> str:
     if out_path:
         print(f"Plot saved to: {out_path}")
 
+    if return_metrics:
+        return out_path, float(overshoot_pct), float(accuracy_mae)
     return out_path
+
+
+def analyze_folder(folder_path: str, save: bool = True) -> None:
+    """
+    Analyze all CSV files in a folder, printing per-file results and the averages.
+    """
+    if not os.path.isdir(folder_path):
+        raise ValueError(f"Not a directory: {folder_path}")
+
+    csv_files = [
+        os.path.join(folder_path, fname)
+        for fname in sorted(os.listdir(folder_path))
+        if fname.lower().endswith(".csv")
+    ]
+
+    if not csv_files:
+        print(f"No CSV files found in folder: {folder_path}")
+        return
+
+    overshoots: list[float] = []
+    accuracies: list[float] = []
+
+    for csv_path in csv_files:
+        try:
+            _, o, a = analyze_and_plot(csv_path, save=save, return_metrics=True)
+            if np.isfinite(o):
+                overshoots.append(float(o))
+            if np.isfinite(a):
+                accuracies.append(float(a))
+        except Exception as exc:
+            print(f"Skipping {csv_path}: {exc}")
+
+    if overshoots and accuracies:
+        avg_overshoot = float(np.mean(overshoots))
+        avg_accuracy = float(np.mean(accuracies))
+        print(f"Analyzed {len(overshoots)} CSV files in folder: {folder_path}")
+        print(f"Average Overshoot: {avg_overshoot:.2f}%")
+        print(f"Average Accuracy (steady-state MAE): {avg_accuracy:.6f}")
+    else:
+        print(f"No valid results computed from CSVs in: {folder_path}")
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Analyze response overshoot and accuracy from CSV logs.")
-    parser.add_argument("csv", help="Path to CSV file (with optional '#' header comment lines).")
+    parser.add_argument("csv", nargs="?", help="Path to CSV file (with optional '#' header comment lines).")
+    parser.add_argument(
+        "--folder",
+        help="Path to a folder containing CSV files. Computes per-file metrics and their averages.",
+    )
     parser.add_argument("--no-save", action="store_true", help="Do not save plot, display it instead.")
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
-    analyze_and_plot(args.csv, save=not args.no_save)
+    if args.folder:
+        analyze_folder(args.folder, save=not args.no_save)
+    elif args.csv:
+        analyze_and_plot(args.csv, save=not args.no_save)
+    else:
+        raise SystemExit("Provide a CSV path or use --folder to analyze a directory.")
 
