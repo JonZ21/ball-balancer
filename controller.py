@@ -72,15 +72,25 @@ class PIDcontroller:
         # Proportional term
     
         P = self.Kp * error
-        self.integral += error * dt
-        I = self.Ki * self.integral
+        proposed_integral = self.integral + error * dt
+        I = self.Ki * proposed_integral
         D = self.Kd * (error - self.previous_error) / dt
 
-        # Calculate output relative to neutral angle (10 degrees)
-        output = self.neutral_angle + (P + I + D)
+        # Calculate raw output relative to neutral angle (10 degrees)
+        raw_output = self.neutral_angle + (P + I + D)
 
         # Clip to valid range [0, 20] where 0=up, 10=neutral, 20=down
-        output = np.clip(output, self.min_output_angle, self.max_output_angle)
+        output = np.clip(raw_output, self.min_output_angle, self.max_output_angle)
+
+        # Anti-windup: only commit the new integral when we're not saturating
+        # or when the error would drive the actuator back toward the linear range.
+        if output == raw_output:
+            self.integral = proposed_integral
+        else:
+            saturating_high = raw_output > self.max_output_angle and error > 0
+            saturating_low = raw_output < self.min_output_angle and error < 0
+            if not (saturating_high or saturating_low):
+                self.integral = proposed_integral
 
         self.previous_error = error
 
