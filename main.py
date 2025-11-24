@@ -78,7 +78,7 @@ min_motor_angle = 0
 max_motor_angle = 20
 
 motor1_pid = PIDcontroller(Kp, Ki, Kd, min_motor_angle, max_motor_angle)
-motor2_pid = PIDcontroller(Kp, Ki, Kd, min_motor_angle +6, max_motor_angle +6)
+motor2_pid = PIDcontroller(Kp, Ki, Kd, min_motor_angle +2, max_motor_angle +2)
 motor3_pid = PIDcontroller(Kp, Ki, Kd, min_motor_angle, max_motor_angle)
 
 # Last valid camera error (used if detection drops out briefly)
