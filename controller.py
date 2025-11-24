@@ -39,7 +39,7 @@ def projected_errors (u1, u2, u3, ball_position, s, deadzone_radius, count):
     return errors, count
 
 class PIDcontroller:
-    def __init__(self, Kp, Ki, Kd, min_motor_angle, max_motor_angle):
+    def __init__(self, Kp, Ki, Kd, min_motor_angle, max_motor_angle, anti_windup_gain=0.2):
         self.Kp = Kp
         self.Ki = Ki
         self.Kd = Kd
@@ -48,6 +48,7 @@ class PIDcontroller:
         self.min_output_angle = min_motor_angle  # degrees (0 = up)
         self.max_output_angle = max_motor_angle   # degrees (20 = down)
         self.neutral_angle = 10  # Neutral/resting position
+        self.anti_windup_gain = anti_windup_gain
 
     def update_gains(self, Kp=None, Ki=None, Kd=None):
         """Update PID gains in real-time.
@@ -72,8 +73,8 @@ class PIDcontroller:
         # Proportional term
     
         P = self.Kp * error
-        proposed_integral = self.integral + error * dt
-        I = self.Ki * proposed_integral
+        self.integral += error * dt
+        I = self.Ki * self.integral
         D = self.Kd * (error - self.previous_error) / dt
 
         # Calculate raw output relative to neutral angle (10 degrees)
@@ -82,15 +83,15 @@ class PIDcontroller:
         # Clip to valid range [0, 20] where 0=up, 10=neutral, 20=down
         output = np.clip(raw_output, self.min_output_angle, self.max_output_angle)
 
-        # Anti-windup: only commit the new integral when we're not saturating
-        # or when the error would drive the actuator back toward the linear range.
-        if output == raw_output:
-            self.integral = proposed_integral
-        else:
-            saturating_high = raw_output > self.max_output_angle and error > 0
-            saturating_low = raw_output < self.min_output_angle and error < 0
-            if not (saturating_high or saturating_low):
-                self.integral = proposed_integral
+        # Anti-windup via back-calculation: when the actuator saturates,
+        # bleed off the excess integral in proportion to the saturation amount.
+        if self.anti_windup_gain > 0:
+            if self.Ki != 0:
+                correction = (output - raw_output) * self.anti_windup_gain / self.Ki
+            else:
+                # Fall back to applying the correction directly if Ki is zero
+                correction = (output - raw_output) * self.anti_windup_gain
+            self.integral += correction
 
         self.previous_error = error
 
