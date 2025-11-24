@@ -39,7 +39,7 @@ def projected_errors (u1, u2, u3, ball_position, s, deadzone_radius, count):
     return errors, count
 
 class PIDcontroller:
-    def __init__(self, Kp, Ki, Kd, min_motor_angle, max_motor_angle, anti_windup_gain=0.2):
+    def __init__(self, Kp, Ki, Kd, min_motor_angle, max_motor_angle):
         self.Kp = Kp
         self.Ki = Ki
         self.Kd = Kd
@@ -48,7 +48,7 @@ class PIDcontroller:
         self.min_output_angle = min_motor_angle  # degrees (0 = up)
         self.max_output_angle = max_motor_angle   # degrees (20 = down)
         self.neutral_angle = 10  # Neutral/resting position
-        self.anti_windup_gain = anti_windup_gain
+        self.integral_limit = 5.0  # Hard-clamped integral bound
 
     def update_gains(self, Kp=None, Ki=None, Kd=None):
         """Update PID gains in real-time.
@@ -74,6 +74,11 @@ class PIDcontroller:
     
         P = self.Kp * error
         self.integral += error * dt
+        # Hard clamp the integral term to avoid windup
+        if self.integral > self.integral_limit:
+            self.integral = self.integral_limit
+        elif self.integral < -self.integral_limit:
+            self.integral = -self.integral_limit
         I = self.Ki * self.integral
         D = self.Kd * (error - self.previous_error) / dt
 
@@ -83,18 +88,6 @@ class PIDcontroller:
         # Clip to valid range [0, 20] where 0=up, 10=neutral, 20=down
         output = np.clip(raw_output, self.min_output_angle, self.max_output_angle)
 
-        # Anti-windup via back-calculation: when the actuator saturates,
-        # bleed off the excess integral in proportion to the saturation amount.
-        if self.anti_windup_gain > 0:
-            if self.Ki != 0:
-                correction = (output - raw_output) * self.anti_windup_gain / self.Ki
-            else:
-                # Fall back to applying the correction directly if Ki is zero
-                correction = (output - raw_output) * self.anti_windup_gain
-            self.integral += correction
-
         self.previous_error = error
 
         return output
-
-#hello
