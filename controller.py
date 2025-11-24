@@ -29,8 +29,9 @@ def projected_errors (u1, u2, u3, ball_position, s, deadzone_radius, count):
         # Exponential decay: at count=60, scale=1.0 (full error)
         #                    as count increases, scale → 0.0 exponentially
         # exp(-0.02 * 0) = 1.0, exp(-0.02 * 100) ≈ 0.135
-        scale = np.exp(-0.008 * (count - dead_zone_frames))
-        xy_error = xy_error * scale
+        
+        # scale = np.exp(-0.008 * (count - dead_zone_frames))
+        xy_error = xy_error * 0
 
     #Obtain 1D errors by projecting onto the motors axis
     #returns an array of errors projected to each axis u1, u2, u3 respectively

@@ -54,9 +54,9 @@ serial_port.send_servo_angles(10, 10, 10)
 #Kp = 0.16
 #Ki = 0.007
 #Kd = 0.09
-Kp = 0.1953
-Ki = 0.0010
-Kd = 0.1372
+Kp = 0.1415
+Ki = 0.0015
+Kd = 0.1077
 #Kp=0.1956  Ki=0.0000  Kd=0.1150   ->   J=525.398
 #BEST  Kp=0.2015  Ki=0.0011  Kd=0.1438   ->   J=610.338
 #Starting trial with Kp=0.2022, Ki=0.0011, Kd=0.1232.
